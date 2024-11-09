@@ -1,0 +1,11 @@
+Flask==2.3.3
+Werkzeug==2.3.7
+SQLAlchemy==2.0.23
+pandas==2.1.1
+numpy==1.24.3
+pymysql==1.1.0
+python-dotenv==1.0.0
+requests==2.31.0
+gunicorn==21.2.0
+DBUtils==3.0.3
+tushare==1.2.89

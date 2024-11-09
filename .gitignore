@@ -1,0 +1,22 @@
+# 环境变量文件
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 虚拟环境
+venv/
+env/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+
+# 日志
+*.log
+
+# 其他
+.DS_Store 
