@@ -1261,7 +1261,7 @@ def fetch_main_quotes():
 
 if __name__ == '__main__':
     app.run(
-        host='127.0.0.1',  # 允许外部访问
+        host='127.0.0.1',  # 允许外部访问 1
         port=5000,       # 指定端口号
         debug=True       # 开发模式下保持 debug=True
     ) 
