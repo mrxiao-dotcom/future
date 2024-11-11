@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>期货数据分析系统</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📊</text></svg>">
+    <link href="{{ url_for('static', filename='lib/bootstrap.min.css') }}" rel="stylesheet" data-no-map>
+    <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet">
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <!-- 左侧导航栏 -->
+            <div class="col-md-auto sidebar">
+                <div class="nav flex-column nav-pills vertical-tabs" role="tablist">
+                    <button class="nav-link active" data-bs-toggle="pill" data-bs-target="#data-fetch" type="button">
+                        <span>基础数据</span>
+                    </button>
+                    <button class="nav-link" data-bs-toggle="pill" data-bs-target="#data-filter" type="button">
+                        <span>机会筛选</span>
+                    </button>
+                    <button class="nav-link" data-bs-toggle="pill" data-bs-target="#data-main" type="button">
+                        <span>主力合约</span>
+                    </button>
+                    <button class="nav-link" data-bs-toggle="pill" data-bs-target="#data-display" type="button">
+                        <span>详情展示</span>
+                    </button>
+                </div>
+            </div>
+            
+            <!-- 主要内容区 -->
+            <div class="col-md main-content">
+                {% block content %}{% endblock %}
+            </div>
+        </div>
+    </div>
+
+    <!-- 依赖库和应用脚本 -->
+    <script src="{{ url_for('static', filename='lib/bootstrap.bundle.min.js') }}" data-no-map></script>
+    <script src="{{ url_for('static', filename='lib/echarts.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/monitor.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/main_contracts.js') }}"></script>
+</body>
+</html> 

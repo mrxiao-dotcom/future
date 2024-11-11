@@ -285,7 +285,7 @@ def get_filter_contracts(exchange):
         
         results = futures_handler.db.execute_query(sql, (exchange, today))
         
-        # 转数据格式
+        # 转数格式
         contracts = [{
             'code': row[0],
             'name': row[0]  # 直接使用 fut_code 作为显示名称
@@ -478,7 +478,7 @@ def create_portfolio():
             
             if existing:
                 portfolio_id = existing[0]
-                # 删除旧的约关系
+                # 删除旧的约
                 delete_sql = "DELETE FROM futures_portfolio_contract WHERE portfolio_id = %s"
                 cursor.execute(delete_sql, (portfolio_id,))
                 print(f"Updated portfolio {name} (id: {portfolio_id})")
@@ -660,7 +660,7 @@ def get_portfolio_stats(portfolio_id):
         stats_data = []
         time_data = {}
         
-        # 按时间点组织数据
+        # 按时间点组织据
         for row in results:
             time_str = row[0].strftime('%Y-%m-%d %H:%M:%S')
             code = row[1]
@@ -701,7 +701,7 @@ def get_portfolio_stats(portfolio_id):
                     if d['total_equity'] < min_equity:
                         min_equity = d['total_equity']
             
-            # 计算回撤天数
+            # 计算回天数
             from datetime import datetime
             current_time = datetime.strptime(time_str, '%Y-%m-%d %H:%M:%S')
             max_time = datetime.strptime(max_equity_time, '%Y-%m-%d %H:%M:%S')
@@ -765,7 +765,7 @@ def get_main_contracts():
         contracts_data = {}
         for row in basic_data:
             ts_code = row[0]
-            # 过滤掉连续合约和特殊合约
+            # 过掉连续合约和特殊合约
             if 'L.' in ts_code or '99.' in ts_code:
                 continue
                 
@@ -805,67 +805,82 @@ def get_main_contracts():
             WHERE ts_code = %s AND trade_date = %s
             """
             
-            # 获取周数据
+            # 获取周数据（5个交易日）
             week_sql = """
             SELECT 
-                AVG(amount) as avg_amount,
-                MAX(high) as max_high,
-                MIN(low) as min_low,
-                AVG(pre_close) as avg_pre_close
-            FROM futures_daily_quotes
-            WHERE ts_code = %s AND trade_date >= %s
+                SUM(amount) as total_amount,
+                MAX(high) as max_price,
+                MIN(low) as min_price
+            FROM (
+                SELECT amount, high, low
+                FROM futures_daily_quotes
+                WHERE ts_code = %s
+                AND trade_date <= %s
+                ORDER BY trade_date DESC
+                LIMIT 5
+            ) t
             """
             
-            # 获取月数据
+            # 获取月数据（22个交易日）
             month_sql = """
             SELECT 
-                AVG(amount) as avg_amount,
-                MAX(high) as max_high,
-                MIN(low) as min_low,
-                AVG(pre_close) as avg_pre_close
-            FROM futures_daily_quotes
-            WHERE ts_code = %s AND trade_date >= %s
+                SUM(amount) as total_amount,
+                MAX(high) as max_price,
+                MIN(low) as min_price
+            FROM (
+                SELECT amount, high, low
+                FROM futures_daily_quotes
+                WHERE ts_code = %s
+                AND trade_date <= %s
+                ORDER BY trade_date DESC
+                LIMIT 22
+            ) t
             """
             
             latest_data = futures_handler.db.execute_query(latest_sql, (ts_code, latest_date))
-            week_data = futures_handler.db.execute_query(week_sql, (ts_code, week_ago))
-            month_data = futures_handler.db.execute_query(month_sql, (ts_code, month_ago))
+            week_data = futures_handler.db.execute_query(week_sql, (ts_code, latest_date))
+            month_data = futures_handler.db.execute_query(month_sql, (ts_code, latest_date))
             
-            if latest_data:
+            if latest_data and latest_data[0]:
                 latest = latest_data[0]
-                week = week_data[0]
-                month = month_data[0]
+                week = week_data[0] if week_data else (0, 0, 0)
+                month = month_data[0] if month_data else (0, 0, 0)
                 
-                # 计算振幅
+                # 计算日振幅
                 latest_amplitude = ((float(latest[1] or 0) - float(latest[2] or 0)) / float(latest[3] or 1)) * 100 if latest[3] else 0
-                week_amplitude = ((float(week[1] or 0) - float(week[2] or 0)) / float(week[3] or 1)) * 100 if week[3] else 0
-                month_amplitude = ((float(month[1] or 0) - float(month[2] or 0)) / float(month[3] or 1)) * 100 if month[3] else 0
+                
+                # 计算周振幅（5日最高最低价之差/最低价）
+                week_min_price = float(week[2] or 0)
+                week_max_price = float(week[1] or 0)
+                week_amplitude = ((week_max_price - week_min_price) / week_min_price * 100) if week_min_price > 0 else 0
+                
+                # 计算月振幅（22日最高最低价之差/最低价）
+                month_min_price = float(month[2] or 0)
+                month_max_price = float(month[1] or 0)
+                month_amplitude = ((month_max_price - month_min_price) / month_min_price * 100) if month_min_price > 0 else 0
                 
                 # 计算价格百分位
                 price_position = 0
-                if month[1] and month[2] and latest[4]:
-                    month_high = float(month[1])
-                    month_low = float(month[2])
-                    current_price = float(latest[4])
-                    if month_high > month_low:
-                        price_position = ((current_price - month_low) / (month_high - month_low)) * 100
+                if month_max_price > month_min_price:
+                    current_price = float(latest[4] or 0)
+                    price_position = ((current_price - month_min_price) / (month_max_price - month_min_price)) * 100
                 
                 contracts.append({
                     'ts_code': ts_code,
                     'name': contract['name'],
                     'exchange': contract['exchange'],
                     'fut_code': contract['fut_code'],
-                    'latest_amount': float(latest[0] or 0) / 10000,  # 从万转换为亿
+                    'latest_amount': float(latest[0] or 0) / 10000,  # 转换为亿
                     'latest_amplitude': latest_amplitude,
                     'close_price': float(latest[4] or 0),
                     'volume': float(latest[5] or 0),  # 成交量
                     'oi': float(latest[6] or 0),  # 持仓量
-                    'week_amount': float(week[0] or 0) / 10000,  # 从万转换为亿
-                    'week_amplitude': week_amplitude,
-                    'month_amount': float(month[0] or 0) / 10000,  # 从万转换为亿
-                    'month_amplitude': month_amplitude,
-                    'month_low': float(month[2] or 0),
-                    'month_high': float(month[1] or 0),
+                    'week_amount': float(week[0] or 0) / 10000,  # 转换为亿
+                    'week_amplitude': week_amplitude,  # 周振幅
+                    'month_amount': float(month[0] or 0) / 10000,  # 转换为亿
+                    'month_amplitude': month_amplitude,  # 月振幅
+                    'month_low': month_min_price,
+                    'month_high': month_max_price,
                     'price_position': price_position
                 })
         
@@ -885,28 +900,6 @@ def get_contract_details(ts_code):
     try:
         # 获取最近10个交易日的数据
         history_sql = """
-        SELECT DISTINCT trade_date
-        FROM futures_daily_quotes
-        WHERE ts_code = %s
-        AND trade_date <= CURDATE()
-        ORDER BY trade_date DESC
-        LIMIT 10  # 确保获取10条记录
-        """
-        
-        trade_dates = futures_handler.db.execute_query(history_sql, (ts_code,))
-        if not trade_dates:
-            return jsonify({
-                'status': 'success',
-                'data': {
-                    'daily_data': [],
-                    'related_contracts': []
-                }
-            })
-        
-        print(f"Found {len(trade_dates)} trading dates for {ts_code}")
-        
-        # 获取这些日期的行情数据
-        quotes_sql = """
         SELECT 
             trade_date,
             close,
@@ -915,19 +908,11 @@ def get_contract_details(ts_code):
             oi
         FROM futures_daily_quotes
         WHERE ts_code = %s
-        AND trade_date IN %s
         ORDER BY trade_date DESC
+        LIMIT 10
         """
         
-        dates_tuple = tuple(row[0] for row in trade_dates)
-        print(f"Querying quotes for dates: {dates_tuple}")
-        
-        history_data = futures_handler.db.execute_query(
-            quotes_sql, 
-            (ts_code, dates_tuple)
-        )
-        
-        print(f"Found {len(history_data)} quote records")
+        history_data = futures_handler.db.execute_query(history_sql, (ts_code,))
         
         # 计算每日涨跌幅
         daily_data = []
@@ -941,63 +926,71 @@ def get_contract_details(ts_code):
                 'oi': float(row[4] or 0)
             })
         
+        print(f"Found {len(daily_data)} quote records")
+        
         # 获取相关合约
-        base_code = ts_code.split('.')[0]  # 完整合约代码（如 J2501）
-        product_code = ''.join(c for c in base_code if not c.isdigit())  # 提取品种代码（如 J）
-        exchange = ts_code.split('.')[1]  # 获取交易所代码
+        base_code = ts_code.split('.')[0]
+        product_code = ''
+        for char in base_code:
+            if not char.isdigit():
+                product_code += char
+            else:
+                break
+        
+        exchange = ts_code.split('.')[1]
         today = datetime.datetime.now().strftime('%Y%m%d')
         
         # 获取最新交易日期
-        latest_date = trade_dates[0][0] if trade_dates else None
+        latest_date_sql = "SELECT MAX(trade_date) FROM futures_daily_quotes"
+        latest_date = futures_handler.db.execute_query(latest_date_sql)[0][0]
         
-        # 分两步获取相关合约
-        # 1. 先获取所有同品种的合约代码
+        # 获取所有相关合约
         contracts_sql = """
         SELECT ts_code 
         FROM futures_basic
         WHERE exchange = %s
         AND delist_date >= %s
-        AND ts_code LIKE %s
-        AND ts_code != %s
+        AND ts_code REGEXP %s
+        AND ts_code NOT LIKE '%%L.%%'
+        AND ts_code NOT LIKE '%%99.%%'
         """
         
-        # 构建匹配模式
-        pattern = f"{product_code}%"
+        # 构建正则表达式，确保只匹配完全相同的品种代码
+        regex_pattern = f"^{product_code}[0-9]"
         
-        print(f"Querying contracts with pattern: {pattern}")
+        print(f"Searching for contracts with pattern: {regex_pattern}")
         contracts = futures_handler.db.execute_query(
             contracts_sql, 
-            (exchange, today, pattern, ts_code)
+            (exchange, today, regex_pattern)
         )
-        print(f"Found {len(contracts)} related contracts")
+        print(f"Query returned {len(contracts)} rows")
         
-        # 2. 获取这些合约的最新行情数据
+        # 获取相关合约的行情数据
         related_contracts = []
         if contracts and latest_date:
             contract_codes = tuple(row[0] for row in contracts)
-            if contract_codes:  # 确保有合约代码
-                quotes_sql = """
-                SELECT 
-                    ts_code,
-                    close,
-                    amount,
-                    oi
-                FROM futures_daily_quotes
-                WHERE ts_code IN %s
-                AND trade_date = %s
-                AND ts_code NOT LIKE '%%L.%%'
-                AND ts_code NOT LIKE '%%99.%%'
-                """
+            if len(contract_codes) == 1:
+                contract_codes = (contract_codes[0], contract_codes[0])  # 处理只有一个合约的情况
                 
-                print(f"Querying quotes for contracts: {contract_codes}")
-                quotes = futures_handler.db.execute_query(
-                    quotes_sql,
-                    (contract_codes, latest_date)
-                )
-                print(f"Found {len(quotes)} quotes")
-                
-                # 转换数据
-                for row in quotes:
+            quotes_sql = """
+            SELECT 
+                q.ts_code,
+                q.close,
+                q.amount,
+                q.oi
+            FROM futures_daily_quotes q
+            WHERE q.ts_code IN %s
+            AND q.trade_date = %s
+            """
+            
+            quotes = futures_handler.db.execute_query(
+                quotes_sql,
+                (contract_codes, latest_date)
+            )
+            
+            # 转换数据
+            for row in quotes:
+                if row[0] != ts_code:  # 排除当前合约
                     related_contracts.append({
                         'ts_code': row[0],
                         'close': float(row[1] or 0),
@@ -1021,6 +1014,250 @@ def get_contract_details(ts_code):
         import traceback
         traceback.print_exc()
         return jsonify({'status': 'error', 'message': str(e)})
+
+# 在 app.py 中添加一个函数来判断是否是主力合约
+def is_main_contract(ts_code, latest_date):
+    try:
+        # 获取该品种所有合约的成交额和持仓量
+        base_code = ts_code.split('.')[0][:-4]  # 提取品种代码
+        exchange = ts_code.split('.')[1]
+        
+        sql = """
+        SELECT b.ts_code, q.amount, q.oi
+        FROM futures_basic b
+        JOIN futures_daily_quotes q ON b.ts_code = q.ts_code
+        WHERE b.exchange = %s
+        AND LEFT(b.ts_code, LENGTH(%s)) = %s
+        AND q.trade_date = %s
+        AND b.ts_code NOT LIKE '%%L.%%'
+        AND b.ts_code NOT LIKE '%%99.%%'
+        """
+        
+        results = futures_handler.db.execute_query(sql, (exchange, base_code, base_code, latest_date))
+        
+        # 计算每个合约的得分（成交40%，持仓量60%）
+        max_score = 0
+        main_ts_code = None
+        
+        for row in results:
+            contract_ts_code = row[0]
+            amount = float(row[1] or 0)
+            oi = float(row[2] or 0)
+            score = amount * 0.4 + oi * 0.6
+            
+            if score > max_score:
+                max_score = score
+                main_ts_code = contract_ts_code
+        
+        return ts_code == main_ts_code
+        
+    except Exception as e:
+        print(f"Error checking main contract: {str(e)}")
+        return False
+
+# 添加交易日判断函数
+def is_trading_day(date_str):
+    # 转换为datetime对象
+    date = datetime.datetime.strptime(date_str, '%Y%m%d')
+    
+    # 周末不是交易日
+    if date.weekday() >= 5:  # 5是周六，6是周日
+        return False
+        
+    # TODO: 后续可以添加节假日判断
+    return True
+
+def get_latest_trading_day():
+    now = datetime.datetime.now()
+    
+    # 如果当前时间早于15:30，使用前一个交易日
+    if now.hour < 15 or (now.hour == 15 and now.minute < 30):
+        check_date = now - datetime.timedelta(days=1)
+    else:
+        check_date = now
+    
+    # 往前查找直到找到交易日
+    while not is_trading_day(check_date.strftime('%Y%m%d')):
+        check_date = check_date - datetime.timedelta(days=1)
+
+
+    return check_date.strftime('%Y%m%d')
+
+# 修改行情数据更新函数
+@app.route('/api/update-quotes', methods=['GET', 'POST'])
+def update_quotes():
+    try:
+        if futures_handler.is_updating:
+            return jsonify({
+                'status': 'error',
+                'message': '另一个更新任务正在进行中'
+            })
+        
+        futures_handler.is_updating = True
+        futures_handler.cancel_update = False
+        futures_handler.update_status = {
+            'status': 'running',
+            'progress': 0,
+            'current_process': '',
+            'logs': [],
+            'updated_count': 0
+        }
+        
+        # 获取当前时间
+        now = datetime.datetime.now()
+        
+        # 使用 get_latest_trading_day 获取最新交易日
+        latest_available_date = get_latest_trading_day()
+        print(f"Latest trading day determined: {latest_available_date}")
+        
+        # 获取数据库中的最新交易日期
+        latest_date_sql = "SELECT MAX(trade_date) FROM futures_daily_quotes"
+        db_latest_date = futures_handler.db.execute_query(latest_date_sql)[0][0]
+        db_latest_date_str = db_latest_date.strftime('%Y%m%d') if db_latest_date else None
+        
+        print(f"Database latest date: {db_latest_date_str}")
+        print(f"Latest available date: {latest_available_date}")
+        
+        # 如果数据库已经是最新的，不需要更新
+        if db_latest_date_str == latest_available_date:
+            futures_handler.update_status['status'] = 'completed'
+            futures_handler.update_status['logs'].append("数据库已经是最新的，无需更新")
+            return jsonify({'status': 'success', 'message': '数据已是最新'})
+        
+        # 获取所有未到的合约
+        contracts_sql = """
+        SELECT ts_code, 
+               (SELECT MAX(trade_date) 
+                FROM futures_daily_quotes 
+                WHERE ts_code = b.ts_code) as last_update_date
+        FROM futures_basic b
+        WHERE delist_date >= CURDATE()
+        """
+        contracts = futures_handler.db.execute_query(contracts_sql)
+        
+        total_contracts = len(contracts)
+        processed_count = 0
+        updated_count = 0
+        
+        for row in contracts:
+            if futures_handler.cancel_update:
+                break
+                
+            ts_code = row[0]
+            last_update = row[1]
+            last_update_str = last_update.strftime('%Y%m%d') if last_update else None
+            
+            futures_handler.update_status['current_process'] = f"处理合约: {ts_code}"
+            
+            try:
+                # 检查是否需要更新
+                if last_update_str == latest_available_date:
+                    print(f"{ts_code} 数据已是最新")
+                    processed_count += 1
+                    futures_handler.progress = int(processed_count * 100 / total_contracts)
+                    continue
+                
+                # 检查是否是主力合约
+                is_main = is_main_contract(ts_code, last_update)
+                
+                if is_main:
+                    # 主力合约：检查最近30个交易日的数据是否完整
+                    check_date = (now - datetime.timedelta(days=45)).strftime('%Y%m%d')
+                    start_date = check_date
+                else:
+                    # 非主力合约：只获取缺失的最新数据
+                    start_date = (last_update + datetime.timedelta(days=1)).strftime('%Y%m%d') if last_update else latest_available_date
+                
+                end_date = latest_available_date
+                print(f"获取{ts_code}的数据: {start_date} 到 {end_date}" + ("（主力合约）" if is_main else ""))
+                
+                # 只有在需要更新数据时才调用API
+                if start_date <= end_date:
+                    df = futures_handler._call_tushare_api(
+                        futures_handler.pro.fut_daily,
+                        ts_code=ts_code,
+                        start_date=start_date,
+                        end_date=end_date
+                    )
+                    
+                    if not df.empty:
+                        print(f"获取到{ts_code}的{len(df)}条数据")
+                        # 保存数据
+                        insert_sql = """
+                        INSERT INTO futures_daily_quotes 
+                            (ts_code, trade_date, open, high, low, close, 
+                             pre_close, change_rate, vol, amount, oi)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        ON DUPLICATE KEY UPDATE
+                            open = VALUES(open),
+                            high = VALUES(high),
+                            low = VALUES(low),
+                            close = VALUES(close),
+                            pre_close = VALUES(pre_close),
+                            change_rate = VALUES(change_rate),
+                            vol = VALUES(vol),
+                            amount = VALUES(amount),
+                            oi = VALUES(oi)
+                        """
+                        
+                        params = [(
+                            row['ts_code'],
+                            row['trade_date'],
+                            row['open'],
+                            row['high'],
+                            row['low'],
+                            row['close'],
+                            row['pre_close'],
+                            row['change'],
+                            row['vol'],
+                            row['amount'],
+                            row['oi']
+                        ) for _, row in df.iterrows()]
+                        
+                        futures_handler.db.execute_many(insert_sql, params)
+                        futures_handler.update_status['logs'].append(
+                            f"更新{ts_code}数据{len(params)}条" + 
+                            ("（主力合约）" if is_main else "")
+                        )
+                        updated_count += 1
+                    else:
+                        print(f"未获取到{ts_code}的数据")
+                else:
+                    print(f"{ts_code}数据已是最新")
+                
+                processed_count += 1
+                futures_handler.progress = int(processed_count * 100 / total_contracts)
+                futures_handler.update_status['updated_count'] = updated_count
+                
+            except Exception as e:
+                error_msg = f"处理合约{ts_code}时出错: {str(e)}"
+                futures_handler.update_status['logs'].append(error_msg)
+                print(error_msg)
+                continue
+        
+        if not futures_handler.cancel_update:
+            futures_handler.update_status['status'] = 'completed'
+            futures_handler.update_status['logs'].append(
+                f"行情数据更新完成，共处理{processed_count}个合约，更新{updated_count}个合约"
+            )
+        
+        return jsonify({'status': 'success'})
+        
+    except Exception as e:
+        futures_handler.update_status['status'] = 'error'
+        futures_handler.update_status['logs'].append(f"更新失败: {str(e)}")
+        return jsonify({'status': 'error', 'message': str(e)})
+        
+    finally:
+        futures_handler.is_updating = False
+        futures_handler.cancel_update = False
+
+
+# 修改行情数据更新函数
+@app.route('/api/fetch-mainquotes', methods=['GET', 'POST'])
+def fetch_main_quotes():
+    print("btn clicked")
+    pass
 
 if __name__ == '__main__':
     app.run(

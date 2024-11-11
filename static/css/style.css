@@ -1,0 +1,385 @@
+.sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    width: 35px;
+    background-color: #f8f9fa;
+    border-right: 1px solid #dee2e6;
+    z-index: 1000;
+    padding: 8px 4px;
+}
+
+.vertical-tabs {
+    width: 25px;
+    margin: 0;
+    position: sticky;
+    top: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.nav-pills .nav-link {
+    margin: 0;
+    text-align: center;
+    padding: 6px 1px;
+    width: 25px;
+    min-height: 90px;
+    border: 1px solid #dee2e6;
+    border-radius: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    line-height: 1;
+    position: relative;
+    white-space: nowrap;
+}
+
+.nav-pills .nav-link span {
+    writing-mode: vertical-lr;
+    -webkit-writing-mode: vertical-lr;
+    -ms-writing-mode: vertical-lr;
+    text-orientation: upright;
+    letter-spacing: 4px;
+    font-weight: normal;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 12px;
+    text-align: center;
+}
+
+.nav-pills .nav-link.active {
+    background-color: #0d6efd;
+    color: white;
+}
+
+.main-content {
+    margin-left: 35px;
+    padding: 8px;
+    width: calc(100% - 35px);
+}
+
+.card {
+    margin-bottom: 8px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+
+.card-header {
+    background-color: #f8f9fa;
+    border-bottom: 1px solid #dee2e6;
+    padding: 6px 10px;
+    font-size: 12px;
+}
+
+.card-header h5, .card-header h6 {
+    font-size: 13px;
+    margin: 0;
+}
+
+.card-body {
+    padding: 8px;
+}
+
+/* 适配移动设备 */
+@media (max-width: 768px) {
+    .sidebar {
+        height: 35px;
+        width: 100%;
+    }
+    
+    .main-content {
+        margin-left: 0;
+        margin-top: 35px;
+        padding: 4px;
+        width: 100%;
+    }
+}
+
+/* 添加机构持仓表格的样式 */
+.institution-holdings {
+    height: 100% !important;
+    overflow-y: auto;
+}
+
+.institution-holdings .table-responsive {
+    height: calc(100% - 50px);
+    overflow-y: auto;
+}
+
+/* 调整表格列宽 */
+.institution-holdings table th:nth-child(1) { width: 5%; }
+.institution-holdings table th:nth-child(2) { width: 20%; }
+.institution-holdings table th:nth-child(3) { width: 15%; }
+.institution-holdings table th:nth-child(4) { width: 15%; }
+.institution-holdings table th:nth-child(5) { width: 25%; }
+.institution-holdings table th:nth-child(6) { width: 20%; }
+
+/* 机会筛选模块样式 */
+.list-group-item {
+    cursor: pointer;
+    user-select: none;
+    padding: 4px 8px;
+    font-size: 11px;
+}
+
+.list-group-item:hover {
+    background-color: #f8f9fa;
+}
+
+.list-group-item.active {
+    background-color: #0d6efd;
+    border-color: #0d6efd;
+    color: white;
+}
+
+.list-group-item.active:hover {
+    background-color: #0b5ed7;
+}
+
+/* 中间按钮组样式 */
+.add-contract, .remove-contract {
+    width: 100px;
+}
+
+/* 滚动条样式 */
+.list-group {
+    scrollbar-width: thin;
+    scrollbar-color: #dee2e6 #fff;
+}
+
+.list-group::-webkit-scrollbar {
+    width: 6px;
+}
+
+.list-group::-webkit-scrollbar-track {
+    background: #fff;
+}
+
+.list-group::-webkit-scrollbar-thumb {
+    background-color: #dee2e6;
+    border-radius: 3px;
+}
+
+/* 表格样式优化 */
+.table {
+    font-size: 11px;
+    margin-bottom: 0;
+}
+
+.table td, .table th {
+    padding: 3px 6px;
+}
+
+/* 按钮组样式优化 */
+.btn-group-sm > .btn {
+    padding: 2px 5px;
+    font-size: 11px;
+}
+
+/* 输入框样式优化 */
+.input-group-sm > .form-control,
+.input-group-sm > .input-group-text {
+    padding: 2px 5px;
+    font-size: 11px;
+    height: auto;
+}
+
+/* 标签页样式优化 */
+.nav-tabs .nav-link {
+    padding: 4px 8px;
+    font-size: 11px;
+    min-height: auto;
+    width: auto;
+    display: inline-block;
+    position: relative;
+    white-space: nowrap;
+}
+
+.nav-tabs .nav-link span {
+    writing-mode: horizontal-tb;
+    -webkit-writing-mode: horizontal-tb;
+    -ms-writing-mode: horizontal-tb;
+    text-orientation: mixed;
+    letter-spacing: normal;
+    position: static;
+    transform: none;
+    width: auto;
+}
+
+/* 统计数据表格样式 */
+.table-sm td, .table-sm th {
+    padding: 2px 4px;
+    font-size: 11px;
+}
+
+/* 图表容器高度调整 */
+.equity-chart {
+    height: calc(100vh - 450px) !important;
+    min-height: 250px !important;
+}
+
+/* 列表高度调整 */
+.available-contracts,
+.selected-contracts,
+.portfolio-list {
+    height: 300px !important;
+}
+
+/* 进度条和日志区域样式 */
+.progress {
+    height: 0.4rem;
+}
+
+#fetchLog {
+    max-height: 100px;
+    font-size: 11px;
+}
+
+/* 品种详情表格样式 */
+.table-container {
+    position: relative;
+}
+
+.table-container thead.sticky-top {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+}
+
+.table-container tbody {
+    height: calc(100% - 30px);
+    overflow-y: auto;
+}
+
+/* 止损空间的颜色样式 */
+.stop-loss-space.positive {
+    color: #198754;  /* 绿色 */
+}
+
+.stop-loss-space.negative {
+    color: #dc3545;  /* 红色 */
+}
+
+/* 排序表头样式 */
+.sortable {
+    cursor: pointer;
+    position: relative;
+    padding-right: 18px !important;
+}
+
+.sortable:hover {
+    background-color: #f8f9fa;
+}
+
+.sortable::after {
+    content: '⇅';
+    position: absolute;
+    right: 5px;
+    color: #999;
+}
+
+.sortable.sort-asc::after {
+    content: '↑';
+    color: #0d6efd;
+}
+
+.sortable.sort-desc::after {
+    content: '↓';
+    color: #0d6efd;
+}
+
+/* 表格样式优化 */
+.table th {
+    white-space: nowrap;
+    background-color: #f8f9fa;
+}
+
+.table td {
+    white-space: nowrap;
+}
+
+.badge {
+    font-weight: normal;
+}
+
+/* 选中行的样式 */
+.main-contracts-list tr.selected {
+    background-color: #e9ecef;
+}
+
+/* 图表容器样式 */
+#priceChangeChart,
+#volumeChart,
+#oiChart {
+    margin-bottom: 10px;
+}
+
+/* 相关合约列表样式 */
+.related-contracts {
+    margin-top: 15px;
+}
+
+.related-contracts h6 {
+    margin-bottom: 10px;
+    font-size: 12px;
+}
+
+/* 期货品种展示区域样式 */
+.futures-display-card {
+    height: 70vh !important;
+}
+
+.futures-display-card .card-body {
+    padding: 8px;
+    height: calc(100% - 40px);  /* 减去卡片头部的高度 */
+    overflow: hidden;
+}
+
+/* 左侧期货品种和合约列表区域 */
+.futures-contracts {
+    height: calc(100% - 90px) !important;  /* 减去标签页和按钮的高度 */
+    overflow-y: auto;
+}
+
+/* 交易所标签页样式优化 */
+#exchangeTabs .nav-link {
+    padding: 2px 6px;
+    font-size: 11px;
+    height: 22px;
+    line-height: 18px;
+}
+
+/* 合约类型筛选按钮样式 */
+.contract-type-filter {
+    padding: 1px 4px !important;
+    font-size: 10px !important;
+    height: 20px !important;
+    line-height: 16px !important;
+}
+
+/* 表格样式进一步优化 */
+.futures-contracts .table {
+    font-size: 10px;
+}
+
+.futures-contracts .table td,
+.futures-contracts .table th {
+    padding: 2px 4px;
+}
+
+/* 卡片头部样式优化 */
+.card-header {
+    padding: 4px 8px;
+    min-height: 30px;
+}
+
+.card-header h5 {
+    font-size: 12px;
+    margin: 0;
+    line-height: 22px;
+}

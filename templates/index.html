@@ -1,0 +1,739 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="tab-content">
+    <!-- 期货基础数据获取 -->
+    <div class="tab-pane fade show active" id="data-fetch">
+        <!-- 期货品种展示区域 -->
+        <div class="card futures-display-card">
+            <div class="card-header">
+                <h5>期货品种展示</h5>
+            </div>
+            <div class="card-body">
+                <div class="row h-100">
+                    <!-- 左侧期货品种和合约列表 -->
+                    <div class="col-md-5 h-100">
+                        <!-- 交易所选择标签页 -->
+                        <ul class="nav nav-tabs mb-2" id="exchangeTabs" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active px-2" data-bs-toggle="tab" data-bs-target="#CFFEX" type="button">中金</button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link px-2" data-bs-toggle="tab" data-bs-target="#DCE" type="button">大商</button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link px-2" data-bs-toggle="tab" data-bs-target="#CZCE" type="button">郑商</button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link px-2" data-bs-toggle="tab" data-bs-target="#SHFE" type="button">上期</button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link px-2" data-bs-toggle="tab" data-bs-target="#INE" type="button">能源</button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link px-2" data-bs-toggle="tab" data-bs-target="#GFEX" type="button">广期</button>
+                            </li>
+                        </ul>
+
+                        <!-- 交易所内容区域 -->
+                        <div class="tab-content h-100" id="exchangeContent">
+                            <!-- 每个交易所的内容 -->
+                            {% for exchange in ['CFFEX', 'DCE', 'CZCE', 'SHFE', 'INE', 'GFEX'] %}
+                            <div class="tab-pane fade {% if loop.first %}show active{% endif %}" id="{{ exchange }}">
+                                <!-- 品种按钮区域 -->
+                                <div class="futures-buttons mb-4">
+                                    <div class="row g-2" id="{{ exchange }}-buttons">
+                                        <!-- 品种按钮将通过 JavaScript 动态添加 -->
+                                    </div>
+                                </div>
+                                
+                                <!-- 合约列表区域 -->
+                                <div class="futures-contracts d-none">
+                                    <div class="card">
+                                        <div class="card-header bg-light">
+                                            <div class="d-flex justify-content-between align-items-center">
+                                                <h6 class="mb-0">合约列表</h6>
+                                                <div class="btn-group">
+                                                    <button type="button" class="btn btn-sm btn-outline-secondary contract-type-filter" data-type="all">全部</button>
+                                                    <button type="button" class="btn btn-sm btn-outline-secondary contract-type-filter" data-type="normal">普通</button>
+                                                    <button type="button" class="btn btn-sm btn-outline-secondary contract-type-filter" data-type="main">主力</button>
+                                                    <button type="button" class="btn btn-sm btn-outline-secondary contract-type-filter" data-type="continuous">连续</button>
+                                                    <button type="button" class="btn btn-sm btn-outline-secondary contract-type-filter" data-type="index">指数</button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="card-body p-0">
+                                            <div class="table-responsive">
+                                                <table class="table table-hover table-striped mb-0">
+                                                    <thead>
+                                                        <tr>
+                                                            <th>合约代码</th>
+                                                            <th>合约名称</th>
+                                                            <th>合约类型</th>
+                                                            <th>上市日期</th>
+                                                            <th>到期日期</th>
+                                                            <th>状态</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        <!-- 合约数据将通过 JavaScript 动态添加 -->
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    <!-- 右侧机构持仓展示 -->
+                    <div class="col-md-7 h-100">
+                        <div class="institution-holdings card">
+                            <div class="card-header bg-light">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <h6 class="mb-0">机构持仓排名</h6>
+                                    <span id="holdingContractName" class="text-primary"></span>
+                                </div>
+                            </div>
+                            <div class="card-body p-0">
+                                <!-- 交易日期选择 -->
+                                <div class="btn-group w-100 mb-2" id="tradeDateButtons">
+                                    <!-- 日期按钮将通过JavaScript动态添加 -->
+                                </div>
+                                
+                                <!-- 持仓类型切换 -->
+                                <div class="btn-group w-100 mb-2">
+                                    <button type="button" class="btn btn-outline-primary active" data-holding-type="long">多头持仓</button>
+                                    <button type="button" class="btn btn-outline-primary" data-holding-type="short">空头持仓</button>
+                                    <button type="button" class="btn btn-outline-primary" data-holding-type="vol">成交量</button>
+                                </div>
+                                
+                                <!-- 持仓排名表格 -->
+                                <div class="table-responsive">
+                                    <table class="table table-hover table-striped mb-0">
+                                        <thead>
+                                            <tr>
+                                                <th>排名</th>
+                                                <th>期货公司</th>
+                                                <th>持仓量</th>
+                                                <th>较前日</th>
+                                                <th>合约</th>
+                                                <th>日期</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="holdingRankBody">
+                                            <!-- 数据将通过JavaScript动态添加 -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 期货品种更新 -->
+        <div class="card">
+            <div class="card-header">
+                <h5>期货品种更新</h5>
+            </div>
+            <div class="card-body">
+                <div class="row mb-4">
+                    <div class="col-md-6">
+                        <div class="btn-group">
+                            <button id="updateFuturesBtn" class="btn btn-primary">
+                                <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
+                                更新期货品种列表
+                            </button>
+                            <button id="cancelUpdateBtn" class="btn btn-danger d-none">
+                                取消更新
+                            </button>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="progress d-none" id="updateProgress">
+                            <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                                 role="progressbar" 
+                                 style="width: 0%" 
+                                 aria-valuenow="0" 
+                                 aria-valuemin="0" 
+                                 aria-valuemax="100">0%</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 添加更新状态和结果展示区域 -->
+                <div class="update-info d-none">
+                    <div class="card">
+                        <div class="card-header bg-light">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <h6 class="mb-0">更新详情</h6>
+                                <span id="updateTime" class="text-muted small"></span>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div class="current-status mb-3">
+                                <strong>当前状态：</strong>
+                                <span id="currentStatus" class="badge bg-secondary">未开始</span>
+                            </div>
+                            <div class="update-details">
+                                <div class="mb-2">
+                                    <strong>正在处理：</strong>
+                                    <span id="currentExchange">-</span>
+                                </div>
+                                <div class="mb-2">
+                                    <strong>已更新品种数：</strong>
+                                    <span id="updatedCount">0</span>
+                                </div>
+                                <div class="mb-2">
+                                    <strong>剩余交易所：</strong>
+                                    <span id="remainingExchanges">-</span>
+                                </div>
+                            </div>
+                            <div class="update-log mt-3">
+                                <strong>更新日志：</strong>
+                                <div id="updateLog" class="small" style="max-height: 150px; overflow-y: auto;">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 期货数据获取 -->
+        <div class="card">
+            <div class="card-header">
+                <h5>期货数据获取</h5>
+            </div>
+            <div class="card-body">
+                <!-- 行情���据获取 -->
+                <div class="row mb-4">
+                    <div class="col-md-6">
+                        <div class="btn-group">
+                            <button id="fetchQuotesBtn" class="btn btn-primary">
+                                <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
+                                更新行情数据
+                            </button>
+                            <button id="cancelQuotesFetchBtn" class="btn btn-danger d-none">
+                                取消更新
+                            </button>
+                        </div>
+                        <div class="btn-group">
+                            <button id="fetchMainQuotesBtn" class="btn btn-primary">
+                                <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
+                                更新主力合约历史
+                            </button>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="progress d-none" id="quotesProgress">
+                            <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                                 role="progressbar" 
+                                 style="width: 0%" 
+                                 aria-valuenow="0" 
+                                 aria-valuemin="0" 
+                                 aria-valuemax="100">0%</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 机构成交持仓获取 -->
+                <div class="row mb-4">
+                    <div class="col-md-6">
+                        <div class="btn-group">
+                            <button id="fetchHoldingsBtn" class="btn btn-primary">
+                                <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
+                                更新机构成交持仓
+                            </button>
+                            <button id="cancelHoldingsFetchBtn" class="btn btn-danger d-none">
+                                取消更新
+                            </button>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="progress d-none" id="holdingsProgress">
+                            <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                                 role="progressbar" 
+                                 style="width: 0%" 
+                                 aria-valuenow="0" 
+                                 aria-valuemin="0" 
+                                 aria-valuemax="100">0%</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 数据获取状态和日志 -->
+                <div class="fetch-info d-none">
+                    <div class="card">
+                        <div class="card-header bg-light">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <h6 class="mb-0">数据获取详情</h6>
+                                <span id="fetchTime" class="text-muted small"></span>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div class="current-status mb-3">
+                                <strong>当前状态：</strong>
+                                <span id="fetchStatus" class="badge bg-secondary">未开始</span>
+                            </div>
+                            <div class="fetch-details">
+                                <div class="mb-2">
+                                    <strong>正在处理：</strong>
+                                    <span id="currentProcess">-</span>
+                                </div>
+                                <div class="mb-2">
+                                    <strong>已处理合约数：</strong>
+                                    <span id="processedCount">0</span>
+                                </div>
+                            </div>
+                            <div class="fetch-log mt-3">
+                                <strong>处理日志：</strong>
+                                <div id="fetchLog" class="small" style="max-height: 150px; overflow-y: auto;">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 期货信息展示 -->
+    <div class="tab-pane fade" id="data-display">
+        <div class="card">
+            <div class="card-header">
+                <h5>详情展示</h5>
+            </div>
+            <div class="card-body">
+                <!-- 上部分：组合选择（40%） -->
+                <div class="row mb-2" style="height: 40vh;">
+                    <!-- 左侧组合列表 -->
+                    <div class="col-md-4">
+                        <div class="card h-100">
+                            <div class="card-header bg-light">
+                                <h6 class="mb-0">组合列表</h6>
+                            </div>
+                            <div class="card-body p-0">
+                                <div class="list-group list-group-flush portfolio-monitor-list" 
+                                     style="height: calc(100% - 32px); overflow-y: auto;">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 中间：品种详情 -->
+                    <div class="col-md-6">
+                        <div class="card h-100">
+                            <div class="card-header bg-light">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <h6 class="mb-0">品种详情</h6>
+                                    <span id="selectedPortfolioName" class="text-primary"></span>
+                                </div>
+                            </div>
+                            <div class="card-body p-0">
+                                <div class="table-container" style="height: calc(100% - 32px); overflow: hidden;">
+                                    <table class="table table-sm table-hover mb-0">
+                                        <thead class="sticky-top bg-white">
+                                            <tr>
+                                                <th>品种代码</th>
+                                                <th>多空方向</th>
+                                                <th>最新权益</th>
+                                                <th>最新价</th>
+                                                <th>止损价</th>
+                                                <th>止损空间</th>
+                                                <th>更新时间</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="portfolioDetails" style="overflow-y: auto;">
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 右侧：按钮区域 -->
+                    <div class="col-md-2">
+                        <div class="d-grid gap-2">
+                            <button class="btn btn-primary" id="startMonitor" disabled>
+                                开始监测
+                            </button>
+                            <button class="btn btn-danger d-none" id="stopMonitor">
+                                停止监测
+                            </button>
+                            <div class="text-center mt-2">
+                                <span id="nextUpdateTime" class="small"></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 下部分：动态表格（60%） -->
+                <div class="row" style="height: 58vh;">
+                    <div class="col-12">
+                        <div class="card h-100">
+                            <div class="card-header bg-light">
+                                <h6 class="mb-0">实时监测数据</h6>
+                            </div>
+                            <div class="card-body p-0">
+                                <div class="table-responsive" style="height: calc(100% - 40px);">
+                                    <table class="table table-sm table-hover table-bordered mb-0">
+                                        <thead>
+                                            <tr id="monitorTableHeader">
+                                                <th style="width: 150px;">指标</th>
+                                                <!-- 时间列将通过JavaScript动态添加 -->
+                                            </tr>
+                                        </thead>
+                                        <tbody id="monitorTableBody">
+                                            <tr><td>当前权益</td></tr>
+                                            <tr><td>过去一年最高权益</td></tr>
+                                            <tr><td>发生时间</td></tr>
+                                            <tr><td>当前回撤</td></tr>
+                                            <tr><td>回撤时间</td></tr>
+                                            <tr><td>过去一年最大回撤</td></tr>
+                                            <tr><td>品种总数</td></tr>
+                                            <tr><td>品种多空</td></tr>
+                                            <tr><td>净多空</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 机会筛选块 -->
+    <div class="tab-pane fade" id="data-filter">
+        <div class="card">
+            <div class="card-header">
+                <h5>机会筛选</h5>
+            </div>
+            <div class="card-body">
+                <!-- 上部分：三个窗口并排 -->
+                <div class="row mb-4">
+                    <!-- 左侧：备选合约 -->
+                    <div class="col-md-4">
+                        <!-- 交易所选择标签页 -->
+                        <ul class="nav nav-tabs mb-3" id="filterExchangeTabs" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active px-2" data-bs-toggle="tab" data-bs-target="#filter-CFFEX" type="button">
+                                    <span>中金所</span>
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link px-2" data-bs-toggle="tab" data-bs-target="#filter-DCE" type="button">
+                                    <span>大商所</span>
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link px-2" data-bs-toggle="tab" data-bs-target="#filter-CZCE" type="button">
+                                    <span>郑商所</span>
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link px-2" data-bs-toggle="tab" data-bs-target="#filter-SHFE" type="button">
+                                    <span>上期所</span>
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link px-2" data-bs-toggle="tab" data-bs-target="#filter-INE" type="button">
+                                    <span>能源所</span>
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link px-2" data-bs-toggle="tab" data-bs-target="#filter-GFEX" type="button">
+                                    <span>广期所</span>
+                                </button>
+                            </li>
+                        </ul>
+
+                        <!-- 备选合约列表 -->
+                        <div class="tab-content" id="filterExchangeContent">
+                            {% for exchange in ['CFFEX', 'DCE', 'CZCE', 'SHFE', 'INE', 'GFEX'] %}
+                            <div class="tab-pane fade {% if loop.first %}show active{% endif %}" id="filter-{{ exchange }}">
+                                <div class="card">
+                                    <div class="card-header bg-light">
+                                        <h6 class="mb-0">备选合约</h6>
+                                    </div>
+                                    <div class="card-body p-0">
+                                        <div class="list-group list-group-flush available-contracts" 
+                                             data-exchange="{{ exchange }}"
+                                             style="height: 400px; overflow-y: auto;">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    <!-- 中间：已选合约 -->
+                    <div class="col-md-4">
+                        <div class="card h-100">
+                            <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                                <h6 class="mb-0">已选合约</h6>
+                                <div class="btn-group btn-group-sm">
+                                    <button class="btn btn-primary add-contract">
+                                        <i class="bi bi-arrow-left"></i> 加入
+                                    </button>
+                                    <button class="btn btn-danger remove-contract">
+                                        <i class="bi bi-arrow-right"></i> 移除
+                                    </button>
+                                    <button class="btn btn-danger clear-selected">
+                                        <i class="bi bi-trash"></i> 全部清除
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="card-body p-0">
+                                <div class="list-group list-group-flush selected-contracts" 
+                                     style="height: 400px; overflow-y: auto;">
+                                </div>
+                                <div class="p-3 border-top">
+                                    <button class="btn btn-success w-100 generate-equity">
+                                        生成净值曲线
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 右侧：组合管理 -->
+                    <div class="col-md-4">
+                        <div class="card h-100">
+                            <div class="card-header bg-light">
+                                <div class="d-flex flex-column">
+                                    <!-- 手动输入区域 -->
+                                    <div class="input-group input-group-sm mb-2">
+                                        <span class="input-group-text">手动输入</span>
+                                        <input type="text" class="form-control" id="manualContracts" 
+                                               placeholder="请输入合约代码，用逗号分隔">
+                                    </div>
+                                    <!-- 组合名称和保存按钮 -->
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <h6 class="mb-0">组合管理</h6>
+                                        <div class="input-group input-group-sm" style="width: 70%;">
+                                            <input type="text" class="form-control" id="portfolioName" 
+                                                   placeholder="输入组合名称">
+                                            <button class="btn btn-primary" id="savePortfolio">
+                                                保存组合
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="card-body p-0">
+                                <div class="list-group list-group-flush portfolio-list" 
+                                     style="height: 400px; overflow-y: auto;">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 下部分净值曲线 -->
+                <div class="row">
+                    <div class="col-9">
+                        <div class="card">
+                            <div class="card-header bg-light">
+                                <h6 class="mb-0">净值曲线</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="equity-chart" 
+                                     style="height: calc(100vh - 600px); min-height: 400px;">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-3">
+                        <div class="card">
+                            <div class="card-header bg-light">
+                                <h6 class="mb-0">统计数据</h6>
+                            </div>
+                            <div class="card-body">
+                                <!-- 统计数据表格 -->
+                                <table class="table table-sm">
+                                    <tbody>
+                                        <tr>
+                                            <th>最高权益</th>
+                                            <td id="maxEquity">-</td>
+                                        </tr>
+                                        <tr>
+                                            <th>最高权益时间</th>
+                                            <td id="maxEquityTime">-</td>
+                                        </tr>
+                                        <tr>
+                                            <th>回撤天数</th>
+                                            <td id="drawdownDays">-</td>
+                                        </tr>
+                                        <tr>
+                                            <th>最低权益</th>
+                                            <td id="minEquity">-</td>
+                                        </tr>
+                                        <tr>
+                                            <th>当前权益</th>
+                                            <td id="currentEquity">-</td>
+                                        </tr>
+                                        <tr>
+                                            <th>当前回撤</th>
+                                            <td id="currentDrawdown">-</td>
+                                        </tr>
+                                        <tr>
+                                            <th>最撤</th>
+                                            <td id="maxDrawdown">-</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 主力合约模块 -->
+    <div class="tab-pane fade" id="data-main">
+        <div class="row">
+            <!-- 左侧主力合约列表 -->
+            <div class="col-9">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>主力合约</h5>
+                    </div>
+                    <div class="card-body">
+                        <!-- 交易所筛选按钮 -->
+                        <div class="btn-group mb-3" role="group" id="exchangeFilter">
+                            <button type="button" class="btn btn-outline-primary" data-exchange="CFFEX">中金所</button>
+                            <button type="button" class="btn btn-outline-primary" data-exchange="DCE">大商所</button>
+                            <button type="button" class="btn btn-outline-primary" data-exchange="CZCE">郑商所</button>
+                            <button type="button" class="btn btn-outline-primary" data-exchange="SHFE">上期所</button>
+                            <button type="button" class="btn btn-outline-primary" data-exchange="INE">能源所</button>
+                            <button type="button" class="btn btn-outline-primary" data-exchange="GFEX">广期所</button>
+                        </div>
+
+                        <!-- 筛选条件 -->
+                        <div class="row mb-3">
+                            <div class="col-md-3">
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text">周总额≥</span>
+                                    <input type="number" class="form-control" id="weekAmountFilter" step="0.1" placeholder="亿">
+                                </div>
+                            </div>
+                            <div class="col-md-2">
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text">周振幅≥</span>
+                                    <input type="number" class="form-control" id="weekAmplitudeFilter" step="0.1" placeholder="%">
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text">月总额≥</span>
+                                    <input type="number" class="form-control" id="monthAmountFilter" step="0.1" placeholder="亿">
+                                </div>
+                            </div>
+                            <div class="col-md-2">
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text">日额≥</span>
+                                    <input type="number" class="form-control" id="amountFilter" step="0.1" placeholder="亿">
+                                </div>
+                            </div>
+                            <div class="col-md-2">
+                                <button class="btn btn-sm btn-primary" id="applyFilters">应用筛选</button>
+                                <button class="btn btn-sm btn-secondary" id="resetFilters">重置</button>
+                            </div>
+                        </div>
+
+                        <!-- 主力合约列表 -->
+                        <div class="table-responsive">
+                            <table class="table table-hover table-sm">
+                                <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>代码</th>
+                                        <th>名称</th>
+                                        <th>交易所</th>
+                                        <th class="sortable" data-sort="volume">成交量</th>
+                                        <th class="sortable" data-sort="oi">持仓量</th>
+                                        <th class="sortable" data-sort="latest_amount">成交额(亿)</th>
+                                        <th class="sortable" data-sort="latest_amplitude">振幅(%)</th>
+                                        <th class="sortable" data-sort="week_amount">周总额(亿)</th>
+                                        <th class="sortable" data-sort="week_amplitude">周振幅(%)</th>
+                                        <th class="sortable" data-sort="month_amount">月总额(亿)</th>
+                                        <th class="sortable" data-sort="month_amplitude">月振幅(%)</th>
+                                        <th class="sortable" data-sort="month_low">月最低</th>
+                                        <th class="sortable" data-sort="month_high">月最高</th>
+                                        <th class="sortable" data-sort="close_price">收盘价</th>
+                                        <th class="sortable" data-sort="price_position">价格位置(%)</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="main-contracts-list">
+                                    <!-- 主力合约将通过JavaScript动态添加 -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 右侧详情区域 -->
+            <div class="col-3">
+                <div class="card">
+                    <div class="card-header">
+                        <h6 class="mb-0">合约详情</h6>
+                        <span id="selectedContractCode" class="text-primary"></span>
+                    </div>
+                    <div class="card-body">
+                        <!-- 最近7天行情数据表格 -->
+                        <div class="recent-quotes mb-3">
+                            <h6>最近10天行情</h6>
+                            <div class="table-responsive">
+                                <table class="table table-sm table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>日期</th>
+                                            <th>收盘价</th>
+                                            <th>涨幅(%)</th>
+                                            <th>成交额(亿)</th>
+                                            <th>持仓量</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="recentQuotesList">
+                                        <!-- 行情数据将通过JavaScript动态添加 -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- 相关合约列表 -->
+                        <div class="related-contracts">
+                            <h6>相关合约</h6>
+                            <div class="table-responsive">
+                                <table class="table table-sm">
+                                    <thead>
+                                        <tr>
+                                            <th>合约</th>
+                                            <th>最新价</th>
+                                            <th>成交额(亿)</th>
+                                            <th>持仓量</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="relatedContractsList">
+                                        <!-- 相关合约将通过JavaScript动态添加 -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 
