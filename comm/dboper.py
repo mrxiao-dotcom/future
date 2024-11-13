@@ -7,18 +7,12 @@ class DBOperator:
         conn = db_connector.get_connection()
         try:
             with conn.cursor() as cursor:
-                print(f"Executing SQL: {sql}")
-                print(f"Parameters: {params}")
                 try:
                     cursor.execute(sql, params or ())
                     result = cursor.fetchall()
-                    print(f"Query returned {len(result)} rows")
-                    if result and len(result) > 0:
-                        print(f"First row sample: {result[0]}")
                     return result
                 except Exception as e:
                     print(f"SQL execution error: {str(e)}")
-                    print("Full SQL:", cursor._last_executed if hasattr(cursor, '_last_executed') else sql)
                     raise
         except Exception as e:
             print(f"Database error: {str(e)}")

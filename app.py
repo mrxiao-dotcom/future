@@ -13,259 +13,6 @@ app = Flask(__name__)
 def index():
     return render_template('index.html')
 
-@app.route('/api/fetch-data', methods=['POST'])
-def fetch_data():
-    data_type = request.form.get('data_type')
-    date = request.form.get('date')
-    
-    try:
-        if data_type == 'quote':
-            data = futures_handler.get_futures_quotes(date)
-        elif data_type == 'position':
-            data = futures_handler.get_futures_positions(date)
-        else:
-            return jsonify({'status': 'error', 'message': '无效的数据类型'})
-        
-        # 转换为DataFrame后再转为字典列表
-        df = pd.DataFrame(data)
-        return jsonify({
-            'status': 'success',
-            'data': df.to_dict('records')
-        })
-    except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)})
-
-@app.route('/api/filter-futures', methods=['POST'])
-def filter_futures():
-    filters = {
-        'change_min': request.form.get('change_min', type=float),
-        'change_max': request.form.get('change_max', type=float),
-        'volume_min': request.form.get('volume_min', type=float),
-        'volume_max': request.form.get('volume_max', type=float)
-    }
-    
-    try:
-        data = futures_handler.get_filtered_futures(filters)
-        df = pd.DataFrame(data)
-        return jsonify({
-            'status': 'success',
-            'data': df.to_dict('records')
-        })
-    except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)})
-
-@app.route('/api/futures-data/<code>', methods=['GET'])
-def get_futures_data(code):
-    try:
-        data = futures_handler.get_futures_history(code)
-        df = pd.DataFrame(data)
-        return jsonify({
-            'status': 'success',
-            'data': df.to_dict('records')
-        })
-    except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)})
-
-@app.route('/api/update-futures', methods=['POST'])
-def update_futures():
-    try:
-        futures_handler.update_futures_basic()
-        return jsonify({'status': 'success'})
-    except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)})
-
-@app.route('/api/update-progress')
-def update_progress():
-    def generate():
-        while True:
-            progress = futures_handler.get_update_progress()
-            data = json.dumps({'progress': progress})
-            yield f"data: {data}\n\n"
-            if progress >= 100:
-                break
-            time.sleep(0.5)
-    
-    return Response(generate(), mimetype='text/event-stream')
-
-@app.route('/api/cancel-update', methods=['POST'])
-def cancel_update():
-    try:
-        if futures_handler.cancel_update_process():
-            return jsonify({'status': 'success', 'message': '更新已取消'})
-        return jsonify({'status': 'error', 'message': '当前没有正在进行的更新'})
-    except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)})
-
-@app.route('/api/update-status')
-def get_update_status():
-    status = futures_handler.get_update_status()
-    return jsonify(status)
-
-@app.route('/api/futures-by-exchange')
-def get_futures_by_exchange():
-    try:
-        data = futures_handler.get_futures_by_exchange()
-        return jsonify({
-            'status': 'success',
-            'data': data
-        })
-    except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)})
-
-@app.route('/api/contracts/<base_name>/<exchange>')
-def get_contracts(base_name, exchange):
-    try:
-        data = futures_handler.get_contracts_by_base_name(base_name, exchange)
-        return jsonify({
-            'status': 'success',
-            'data': data
-        })
-    except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)})
-
-@app.route('/api/fetch-futures-data', methods=['POST'])
-def fetch_futures_data():
-    try:
-        futures_handler.fetch_futures_data()
-        return jsonify({'status': 'success'})
-    except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)})
-
-@app.route('/api/holdings/<ts_code>')
-def get_holdings(ts_code):
-    try:
-        # 获取最近三个交易日的数据
-        sql = """
-        SELECT DISTINCT trade_date
-        FROM futures_holding_rank
-        WHERE ts_code LIKE %s
-        ORDER BY trade_date DESC
-        LIMIT 3
-        """
-        
-        pattern = f"{ts_code.split('.')[0][:-4]}%"
-        dates = futures_handler.db.execute_query(sql, (pattern,))
-        
-        if not dates:
-            return jsonify({
-                'status': 'success',
-                'data': {
-                    'dates': [],
-                    'holdings': []
-                }
-            })
-        
-        # 获取新日期的持仓数据
-        latest_date = dates[0][0]
-        
-        sql_holdings = """
-        SELECT 
-            broker,
-            vol,
-            vol_chg,
-            long_hld,
-            long_chg,
-            short_hld,
-            short_chg,
-            trade_date,
-            ts_code
-        FROM futures_holding_rank
-        WHERE ts_code LIKE %s
-        AND trade_date = %s
-        ORDER BY vol DESC
-        """
-        
-        results = futures_handler.db.execute_query(sql_holdings, (pattern, latest_date))
-        
-        # 转换数据格式
-        holdings = [{
-            'broker': row[0],
-            'vol': float(row[1]),
-            'vol_chg': float(row[2]),
-            'long_hld': float(row[3]),
-            'long_chg': float(row[4]),
-            'short_hld': float(row[5]),
-            'short_chg': float(row[6]),
-            'trade_date': row[7].strftime('%Y-%m-%d'),
-            'ts_code': row[8]
-        } for row in results]
-        
-        return jsonify({
-            'status': 'success',
-            'data': {
-                'dates': [d[0].strftime('%Y-%m-%d') for d in dates],
-                'holdings': holdings
-            }
-        })
-        
-    except Exception as e:
-        print(f"Error getting holdings: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({'status': 'error', 'message': str(e)})
-
-@app.route('/api/holdings/<ts_code>/<trade_date>')
-def get_holdings_by_date(ts_code, trade_date):
-    try:
-        sql = """
-        SELECT 
-            broker,
-            vol,
-            vol_chg,
-            long_hld,
-            long_chg,
-            short_hld,
-            short_chg,
-            trade_date,
-            ts_code
-        FROM futures_holding_rank
-        WHERE ts_code LIKE %s
-        AND trade_date = %s
-        ORDER BY vol DESC
-        """
-        
-        pattern = f"{ts_code.split('.')[0][:-4]}%"
-        results = futures_handler.db.execute_query(sql, (pattern, trade_date))
-        
-        holdings = [{
-            'broker': row[0],
-            'vol': float(row[1]),
-            'vol_chg': float(row[2]),
-            'long_hld': float(row[3]),
-            'long_chg': float(row[4]),
-            'short_hld': float(row[5]),
-            'short_chg': float(row[6]),
-            'trade_date': row[7].strftime('%Y-%m-%d'),
-            'ts_code': row[8]
-        } for row in results]
-        
-        return jsonify({
-            'status': 'success',
-            'data': holdings
-        })
-        
-    except Exception as e:
-        print(f"Error getting holdings: {str(e)}")
-        return jsonify({'status': 'error', 'message': str(e)})
-
-@app.route('/api/fetch-quotes', methods=['POST'])
-def fetch_quotes():
-    """获取行"""
-    try:
-        futures_handler.fetch_quotes_data()
-        return jsonify({'status': 'success'})
-    except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)})
-
-@app.route('/api/fetch-holdings', methods=['POST'])
-def fetch_holdings():
-    """获取机构成交持仓数据"""
-    try:
-        futures_handler.fetch_holdings_data()
-        return jsonify({'status': 'success'})
-    except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)})
-
 @app.route('/api/filter-contracts/<exchange>')
 def get_filter_contracts(exchange):
     try:
@@ -313,13 +60,13 @@ def get_equity_data():
                 'message': '未选择合约'
             })
             
-        # 1. 获取每天14:30的数据
+        # 1. 获取每天14:30的数据 - 修改表名为 tbpricedata
         sql = """
         SELECT 
             CONCAT(DATE(PriceTime), ' 14:30:00') as PriceTime,
             ProductCode,
             Equity
-        FROM tbPriceData
+        FROM tbpricedata
         WHERE ProductCode IN %s
         AND PriceTime >= DATE_SUB(NOW(), INTERVAL 1 YEAR)
         AND TIME(PriceTime) = '14:30:00'
@@ -466,7 +213,7 @@ def create_portfolio():
                 'message': '组合名称和合约列表不能为空'
             })
         
-        # 开始事务
+        # 始事务
         conn = futures_handler.db.get_connection()
         cursor = conn.cursor()
         
@@ -566,12 +313,12 @@ def get_portfolio_details(portfolio_id):
                 t1.Equity,
                 t1.ClosePrice,
                 t1.StopPrice
-            FROM tbPriceData t1
+            FROM tbpricedata t1
             INNER JOIN (
                 SELECT 
                     ProductCode,
                     MAX(PriceTime) as max_time
-                FROM tbPriceData
+                FROM tbpricedata
                 WHERE TIME(PriceTime) = '14:30:00'
                 GROUP BY ProductCode
             ) latest ON t1.ProductCode = latest.ProductCode 
@@ -611,10 +358,10 @@ def get_portfolio_stats(portfolio_id):
         contracts = futures_handler.db.execute_query(contracts_sql, (portfolio_id,))
         contract_codes = [code[0].upper() for code in contracts]
         
-        # 获取最近20个时间点
+        # 获取最近20个时
         time_sql = """
         SELECT DISTINCT PriceTime
-        FROM tbPriceData
+        FROM tbpricedata
         WHERE ProductCode = %s
         ORDER BY PriceTime DESC
         LIMIT 20
@@ -636,7 +383,7 @@ def get_portfolio_stats(portfolio_id):
                 t1.Equity,
                 (
                     SELECT Equity
-                    FROM tbPriceData t2
+                    FROM tbpricedata t2
                     WHERE t2.ProductCode = t1.ProductCode
                     AND t2.PriceTime < t1.PriceTime
                     AND t2.Equity IS NOT NULL
@@ -644,7 +391,7 @@ def get_portfolio_stats(portfolio_id):
                     LIMIT 1
                 )
             ) as Equity
-        FROM tbPriceData t1
+        FROM tbpricedata t1
         WHERE t1.ProductCode IN %s
         AND t1.PriceTime IN %s
         ORDER BY t1.PriceTime DESC, t1.ProductCode
@@ -907,7 +654,7 @@ def get_contract_details(ts_code):
             amount,
             oi
         FROM futures_daily_quotes
-        WHERE ts_code = %s
+        WHERE ts_code = %s COLLATE utf8mb4_general_ci
         ORDER BY trade_date DESC
         LIMIT 10
         """
@@ -926,8 +673,6 @@ def get_contract_details(ts_code):
                 'oi': float(row[4] or 0)
             })
         
-        print(f"Found {len(daily_data)} quote records")
-        
         # 获取相关合约
         base_code = ts_code.split('.')[0]
         product_code = ''
@@ -940,63 +685,50 @@ def get_contract_details(ts_code):
         exchange = ts_code.split('.')[1]
         today = datetime.datetime.now().strftime('%Y%m%d')
         
-        # 获取最新交易日期
-        latest_date_sql = "SELECT MAX(trade_date) FROM futures_daily_quotes"
-        latest_date = futures_handler.db.execute_query(latest_date_sql)[0][0]
-        
-        # 获取所有相关合约
+        # 简化的相关合约查询
         contracts_sql = """
-        SELECT ts_code 
-        FROM futures_basic
-        WHERE exchange = %s
-        AND delist_date >= %s
-        AND ts_code REGEXP %s
-        AND ts_code NOT LIKE '%%L.%%'
-        AND ts_code NOT LIKE '%%99.%%'
+        SELECT 
+            b.ts_code,
+            b.delist_date,
+            q.close,
+            q.amount,
+            q.oi
+        FROM futures_basic b
+        LEFT JOIN futures_daily_quotes q ON b.ts_code COLLATE utf8mb4_general_ci = q.ts_code
+        WHERE b.exchange COLLATE utf8mb4_general_ci = %s
+        AND b.delist_date >= %s
+        AND b.ts_code REGEXP %s
+        AND b.ts_code NOT LIKE '%%L.%%'
+        AND b.ts_code NOT LIKE '%%99.%%'
+        ORDER BY b.ts_code
         """
         
         # 构建正则表达式，确保只匹配完全相同的品种代码
         regex_pattern = f"^{product_code}[0-9]"
         
-        print(f"Searching for contracts with pattern: {regex_pattern}")
         contracts = futures_handler.db.execute_query(
             contracts_sql, 
             (exchange, today, regex_pattern)
         )
-        print(f"Query returned {len(contracts)} rows")
         
-        # 获取相关合约的行情数据
+        # 转换数据
         related_contracts = []
-        if contracts and latest_date:
-            contract_codes = tuple(row[0] for row in contracts)
-            if len(contract_codes) == 1:
-                contract_codes = (contract_codes[0], contract_codes[0])  # 处理只有一个合约的情况
+        for row in contracts:
+            if row[0] != ts_code:  # 排除当前合约
+                # 处理日期格式
+                delist_date = row[1]
+                if isinstance(delist_date, datetime.datetime):
+                    delist_date = delist_date.strftime('%Y-%m-%d')
+                elif isinstance(delist_date, str):
+                    delist_date = f"{delist_date[:4]}-{delist_date[4:6]}-{delist_date[6:]}"
                 
-            quotes_sql = """
-            SELECT 
-                q.ts_code,
-                q.close,
-                q.amount,
-                q.oi
-            FROM futures_daily_quotes q
-            WHERE q.ts_code IN %s
-            AND q.trade_date = %s
-            """
-            
-            quotes = futures_handler.db.execute_query(
-                quotes_sql,
-                (contract_codes, latest_date)
-            )
-            
-            # 转换数据
-            for row in quotes:
-                if row[0] != ts_code:  # 排除当前合约
-                    related_contracts.append({
-                        'ts_code': row[0],
-                        'close': float(row[1] or 0),
-                        'amount': float(row[2] or 0) / 10000,  # 转换为亿
-                        'oi': float(row[3] or 0)
-                    })
+                related_contracts.append({
+                    'ts_code': row[0],
+                    'delist_date': delist_date,
+                    'close': float(row[2] or 0),
+                    'amount': float(row[3] or 0) / 10000,  # 转换为亿
+                    'oi': float(row[4] or 0)
+                })
         
         # 按合约代码排序
         related_contracts.sort(key=lambda x: x['ts_code'])
@@ -1011,8 +743,6 @@ def get_contract_details(ts_code):
         
     except Exception as e:
         print(f"Error getting contract details: {str(e)}")
-        import traceback
-        traceback.print_exc()
         return jsonify({'status': 'error', 'message': str(e)})
 
 # 在 app.py 中添加一个函数来判断是否是主力合约
@@ -1121,7 +851,7 @@ def update_quotes():
         # 如果数据库已经是最新的，不需要更新
         if db_latest_date_str == latest_available_date:
             futures_handler.update_status['status'] = 'completed'
-            futures_handler.update_status['logs'].append("数据库已经是最新的，���需更新")
+            futures_handler.update_status['logs'].append("数据库已经是最新的，需更新")
             return jsonify({'status': 'success', 'message': '数据已是最新'})
         
         # 获取所有未到的合约
@@ -1283,11 +1013,11 @@ def get_monitor_chart_data(portfolio_id):
                 }
             })
             
-        # 2. 获取最近90个交易日14:30的数据
+        # 2. 获取最近90个交易日14:30的数据 - 修改表名为 tbpricedata
         data_sql = """
         WITH time_points AS (
             SELECT DISTINCT DATE_FORMAT(PriceTime, '%Y-%m-%d %H:%i:%s') as PriceTime
-            FROM tbPriceData
+            FROM tbpricedata
             WHERE TIME(PriceTime) = '14:30:00'
             AND PriceTime >= DATE_SUB(NOW(), INTERVAL 90 DAY)
             ORDER BY PriceTime
@@ -1299,10 +1029,10 @@ def get_monitor_chart_data(portfolio_id):
         FROM time_points tp
         CROSS JOIN (
             SELECT DISTINCT ProductCode
-            FROM tbPriceData
+            FROM tbpricedata
             WHERE ProductCode IN %s
         ) products
-        LEFT JOIN tbPriceData t1 
+        LEFT JOIN tbpricedata t1 
             ON DATE_FORMAT(t1.PriceTime, '%Y-%m-%d %H:%i:%s') = tp.PriceTime 
             AND t1.ProductCode = products.ProductCode
         ORDER BY t1.PriceTime, t1.ProductCode
@@ -1312,7 +1042,7 @@ def get_monitor_chart_data(portfolio_id):
         results = futures_handler.db.execute_query(data_sql, (tuple(contract_codes),))
         print(f"Query returned {len(results)} rows")
         
-        # 3. 处理数据,按时间点汇总权益
+        # 3. 处理据,按时间点汇总权益
         chart_data = {}
         base_equity = len(contract_codes) * 1000000  # 计算基准权益
         
@@ -1346,7 +1076,7 @@ def get_monitor_chart_data(portfolio_id):
         max_equity_index = values.index(max_equity)
         max_equity_time = times[max_equity_index]
         
-        # 计算当前权益和回撤
+        # 计算前权益和回撤
         current_equity = values[-1] if values else 0
         current_drawdown = ((max_equity - current_equity) / base_equity) * 100 if max_equity > 0 else 0
         

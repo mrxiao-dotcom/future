@@ -1,9 +1,6 @@
 document.addEventListener('DOMContentLoaded', function() {
     console.log('DOM Content Loaded');
     
-    // 初始化所有按钮和进度条元素
-    initializeElements();
-    
     // 初始化机会筛选模块（只在相关页面初始化）
     const filterTab = document.getElementById('data-filter');
     if (filterTab) {
@@ -472,7 +469,7 @@ async function loadInstitutionHoldings(tsCode, contractName) {
     }
 }
 
-// 格式化日期显示
+// 格式化��期显示
 function formatDate(dateStr) {
     const date = new Date(dateStr);
     return date.toLocaleDateString('zh-CN', {
