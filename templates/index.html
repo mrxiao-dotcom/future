@@ -110,7 +110,7 @@
                                     <button type="button" class="btn btn-outline-primary" data-holding-type="vol">成交量</button>
                                 </div>
                                 
-                                <!-- 持仓排名表格 -->
+                                <!-- 持仓排名表��� -->
                                 <div class="table-responsive">
                                     <table class="table table-hover table-striped mb-0">
                                         <thead>
@@ -210,7 +210,7 @@
                 <h5>期货数据获取</h5>
             </div>
             <div class="card-body">
-                <!-- 行情���据获取 -->
+                <!-- 行情据获取 -->
                 <div class="row mb-4">
                     <div class="col-md-6">
                         <div class="btn-group">
@@ -312,7 +312,7 @@
                 <!-- 上部分：组合选择（40%） -->
                 <div class="row mb-2" style="height: 40vh;">
                     <!-- 左侧组合列表 -->
-                    <div class="col-md-4">
+                    <div class="col-md-2">
                         <div class="card h-100">
                             <div class="card-header bg-light">
                                 <h6 class="mb-0">组合列表</h6>
@@ -326,7 +326,7 @@
                     </div>
                     
                     <!-- 中间：品种详情 -->
-                    <div class="col-md-6">
+                    <div class="col-md-3">
                         <div class="card h-100">
                             <div class="card-header bg-light">
                                 <div class="d-flex justify-content-between align-items-center">
@@ -356,17 +356,30 @@
                         </div>
                     </div>
 
-                    <!-- 右侧：按钮区域 -->
-                    <div class="col-md-2">
-                        <div class="d-grid gap-2">
-                            <button class="btn btn-primary" id="startMonitor" disabled>
-                                开始监测
-                            </button>
-                            <button class="btn btn-danger d-none" id="stopMonitor">
-                                停止监测
-                            </button>
-                            <div class="text-center mt-2">
-                                <span id="nextUpdateTime" class="small"></span>
+                    <!-- 右侧：监控控制区 -->
+                    <div class="col-md-7">
+                        <div class="card h-100">
+                            <div class="card-header bg-light">
+                                <h6 class="mb-0">监控控制</h6>
+                            </div>
+                            <div class="card-body">
+                                <!-- 按钮区域 -->
+                                <div class="d-grid gap-2 mb-3">
+                                    <button class="btn btn-primary" id="startMonitor" disabled>
+                                        开始监测
+                                    </button>
+                                    <button class="btn btn-danger d-none" id="stopMonitor">
+                                        停止监测
+                                    </button>
+                                    <div class="text-center mt-2">
+                                        <span id="nextUpdateTime" class="small"></span>
+                                    </div>
+                                </div>
+                                
+                                <!-- 净值图表区域 -->
+                                <div id="monitorChart" style="width: 100%; height: calc(100% - 120px); min-height: 200px;">
+                                    <!-- 图表将通过 JavaScript 初始化 -->
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -385,19 +398,18 @@
                                         <thead>
                                             <tr id="monitorTableHeader">
                                                 <th style="width: 150px;">指标</th>
-                                                <!-- 时间列将通过JavaScript动态添加 -->
                                             </tr>
                                         </thead>
                                         <tbody id="monitorTableBody">
-                                            <tr><td>当前权益</td></tr>
-                                            <tr><td>过去一年最高权益</td></tr>
-                                            <tr><td>发生时间</td></tr>
-                                            <tr><td>当前回撤</td></tr>
-                                            <tr><td>回撤时间</td></tr>
-                                            <tr><td>过去一年最大回撤</td></tr>
-                                            <tr><td>品种总数</td></tr>
-                                            <tr><td>品种多空</td></tr>
-                                            <tr><td>净多空</td></tr>
+                                            <tr><td>当前权益</td><td></td></tr>
+                                            <tr><td>过去一年最高权益</td><td></td></tr>
+                                            <tr><td>发生时间</td><td></td></tr>
+                                            <tr><td>当前回撤</td><td></td></tr>
+                                            <tr><td>回撤时间</td><td></td></tr>
+                                            <tr><td>过去一年最大回撤</td><td></td></tr>
+                                            <tr><td>品种总数</td><td></td></tr>
+                                            <tr><td>品种多空</td><td></td></tr>
+                                            <tr><td>净多空</td><td></td></tr>
                                         </tbody>
                                     </table>
                                 </div>
@@ -598,7 +610,7 @@
         </div>
     </div>
 
-    <!-- 主力合约模块 -->
+    <!-- 力合约模块 -->
     <div class="tab-pane fade" id="data-main">
         <div class="row">
             <!-- 左侧主力合约列表 -->
@@ -721,7 +733,7 @@
                                             <th>合约</th>
                                             <th>最新价</th>
                                             <th>成交额(亿)</th>
-                                            <th>持仓量</th>
+                                            <th>持仓</th>
                                         </tr>
                                     </thead>
                                     <tbody id="relatedContractsList">

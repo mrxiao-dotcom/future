@@ -2,6 +2,179 @@
 let monitoringPortfolioId = null;
 let monitorInterval = null;
 
+// 初始化监控图表
+let monitorChart = null;
+
+function initMonitorChart() {
+    const chartContainer = document.getElementById('monitorChart');
+    if (!chartContainer) {
+        console.error('Chart container not found!');
+        return;
+    }
+    console.log('Initializing chart with container:', chartContainer);
+    
+    monitorChart = echarts.init(chartContainer);
+    console.log('Chart initialized:', monitorChart);
+    
+    const option = {
+        grid: {
+            left: '3%',
+            right: '4%',
+            bottom: '3%',
+            containLabel: true
+        },
+        tooltip: {
+            trigger: 'axis',
+            formatter: function(params) {
+                const date = params[0].axisValue;
+                return `${date}<br/>权益: ${formatNumber(params[0].value)}`;
+            }
+        },
+        xAxis: {
+            type: 'category',
+            boundaryGap: false,
+            data: [],
+            axisLabel: {
+                fontSize: 10,
+                formatter: function(value) {
+                    return value.substring(5, 10);  // 只显示月/日
+                }
+            }
+        },
+        yAxis: {
+            type: 'value',
+            scale: true,
+            axisLabel: {
+                fontSize: 10,
+                formatter: function(value) {
+                    return formatNumber(value);
+                }
+            }
+        },
+        series: [{
+            name: '组合权益',
+            type: 'line',
+            data: [],
+            smooth: true,
+            showSymbol: false,
+            lineStyle: {
+                width: 1
+            },
+            areaStyle: {
+                opacity: 0.1
+            }
+        }]
+    };
+    
+    monitorChart.setOption(option);
+    console.log('Chart option set');
+    
+    // 监听容器大小变化
+    window.addEventListener('resize', () => {
+        monitorChart && monitorChart.resize();
+    });
+}
+
+// 更新图表数据
+async function updateMonitorChart(portfolioId) {
+    try {
+        console.log('Fetching chart data for portfolio:', portfolioId);
+        const response = await fetch(`/api/monitor/chart-data/${portfolioId}`);
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+            console.log('Received chart data:', data);
+            
+            if (!data.data || !data.data.chart_data) {
+                console.warn('No chart data received');
+                return;
+            }
+            
+            // 更新图表数据
+            const times = data.data.chart_data.map(item => item.time);
+            const values = data.data.chart_data.map(item => item.equity);
+            
+            if (!monitorChart) {
+                console.warn('Chart not initialized, initializing now');
+                initMonitorChart();
+            }
+            
+            monitorChart.setOption({
+                xAxis: {
+                    data: times
+                },
+                series: [{
+                    data: values
+                }]
+            });
+            console.log('Chart updated with new data');
+            
+            // 更新统计指标
+            if (data.data.statistics) {
+                console.log('Updating statistics');
+                updateStatistics(data.data.statistics);
+            }
+        }
+    } catch (error) {
+        console.error('Error updating monitor chart:', error);
+    }
+}
+
+// 更新统计指标
+function updateStatistics(stats) {
+    console.log('Updating statistics:', stats);  // 调试日志
+    
+    // 更新表格中的统计数据
+    const tbody = document.getElementById('monitorTableBody');
+    if (!tbody) {
+        console.error('Monitor table body not found');
+        return;
+    }
+    
+    const rows = tbody.getElementsByTagName('tr');
+    
+    // 当前权益
+    if (rows[0]) {
+        const cells = rows[0].getElementsByTagName('td');
+        if (cells[1]) cells[1].textContent = formatNumber(stats.current_equity);
+    }
+    
+    // 过去一年最高权益
+    if (rows[1]) {
+        const cells = rows[1].getElementsByTagName('td');
+        if (cells[1]) cells[1].textContent = formatNumber(stats.max_equity);
+    }
+    
+    // 发生时间
+    if (rows[2]) {
+        const cells = rows[2].getElementsByTagName('td');
+        if (cells[1]) cells[1].textContent = formatDateTime(stats.max_equity_time);
+    }
+    
+    // 当前回撤
+    if (rows[3]) {
+        const cells = rows[3].getElementsByTagName('td');
+        if (cells[1]) cells[1].textContent = formatPercent(stats.current_drawdown);
+    }
+    
+    // 回撤时间
+    if (rows[4]) {
+        const cells = rows[4].getElementsByTagName('td');
+        if (cells[1]) cells[1].textContent = `${stats.drawdown_days}天`;
+        if (stats.drawdown_days > 90) {
+            cells[1].classList.add('text-danger');
+        } else {
+            cells[1].classList.remove('text-danger');
+        }
+    }
+    
+    // 过去一年最大回撤
+    if (rows[5]) {
+        const cells = rows[5].getElementsByTagName('td');
+        if (cells[1]) cells[1].textContent = formatPercent(stats.max_drawdown);
+    }
+}
+
 // 初始化监控功能
 function initializeMonitor() {
     // 监听开始监测按钮
@@ -51,6 +224,8 @@ async function loadMonitorPortfolios() {
 // 加载组合详情
 async function loadPortfolioDetails(portfolioId) {
     try {
+        console.log('Loading portfolio details for ID:', portfolioId);  // 调试日志
+        
         const response = await fetch(`/api/monitor/portfolio-details/${portfolioId}`);
         const data = await response.json();
         
@@ -62,40 +237,20 @@ async function loadPortfolioDetails(portfolioId) {
             }
             
             // 更新品种详情表格
-            const tbody = document.getElementById('portfolioDetails');
-            tbody.innerHTML = data.data.map(contract => {
-                // 计算止损空间
-                let stopLossSpace = '-';
-                let stopLossClass = '';
-                
-                // 如果有多空方向（权益不为0），且有最新价和止损价，才计算止损空间
-                if (contract.current_equity !== 0 && contract.current_price && contract.stop_price) {
-                    if (contract.current_equity > 0) {  // 多头
-                        const space = ((contract.current_price - contract.stop_price) / contract.stop_price * 100);
-                        stopLossSpace = space.toFixed(2) + '%';
-                        stopLossClass = space > 0 ? 'positive' : 'negative';
-                    } else if (contract.current_equity < 0) {  // 空头
-                        const space = ((contract.stop_price - contract.current_price) / contract.current_price * 100);
-                        stopLossSpace = space.toFixed(2) + '%';
-                        stopLossClass = space > 0 ? 'positive' : 'negative';
-                    }
-                }
-                
-                return `
-                    <tr>
-                        <td>${contract.fut_code}</td>
-                        <td>${getDealDirection(contract.current_equity)}</td>
-                        <td>${formatNumber(contract.current_equity)}</td>
-                        <td>${contract.current_equity !== 0 ? (contract.current_price ? formatNumber(contract.current_price) : '-') : '-'}</td>
-                        <td>${contract.current_equity !== 0 ? (contract.stop_price ? formatNumber(contract.stop_price) : '-') : '-'}</td>
-                        <td class="stop-loss-space ${stopLossClass}">${contract.current_equity !== 0 ? stopLossSpace : '-'}</td>
-                        <td>${contract.update_time}</td>
-                    </tr>
-                `;
-            }).join('');
+            updatePortfolioTable(data.data);
             
             // 启用开始监测按钮
             document.getElementById('startMonitor').disabled = false;
+            
+            // 初始化图表(如果还没初始化)
+            if (!monitorChart) {
+                console.log('Initializing chart for the first time');
+                initMonitorChart();
+            }
+            
+            // 更新图表数据
+            console.log('Updating chart data for portfolio:', portfolioId);
+            await updateMonitorChart(portfolioId);
         }
     } catch (error) {
         console.error('Error loading portfolio details:', error);
@@ -206,138 +361,19 @@ function checkUpdateTime() {
     }
 }
 
-// 更新监控数据
+// 更新监数据
 async function updateMonitorData() {
     if (!monitoringPortfolioId) return;
     
     try {
-        // 更新组合详情
-        await loadPortfolioDetails(monitoringPortfolioId);
+        // 现有的代码...
         
-        // 更新统计数据
-        const response = await fetch(`/api/monitor/portfolio-stats/${monitoringPortfolioId}`);
-        const data = await response.json();
+        // 更新图表
+        await updateMonitorChart(monitoringPortfolioId);
         
-        if (data.status === 'success') {
-            updateMonitorTable(data.data);
-        }
     } catch (error) {
         console.error('Error updating monitor data:', error);
     }
-}
-
-// 更新监控表格
-function updateMonitorTable(data) {
-    // 更新表头
-    const headerRow = document.getElementById('monitorTableHeader');
-    headerRow.innerHTML = `
-        <th style="width: 150px;">指标</th>
-        ${data.map(point => `
-            <th>${formatDateTime(point.time)}</th>
-        `).join('')}
-    `;
-    
-    // 更新数据行
-    const tbody = document.getElementById('monitorTableBody');
-    const rows = tbody.querySelectorAll('tr');
-    
-    // 预处理数据，避免重复计算
-    const processedData = data.map(point => {
-        // 计算多空数量
-        let longCount = 0;
-        let shortCount = 0;
-        Object.values(point.positions || {}).forEach(equity => {
-            if (equity > 0) longCount++;
-            else if (equity < 0) shortCount++;
-        });
-        
-        return {
-            time: point.time,
-            current_equity: point.current_equity,
-            contracts_count: point.contracts_count,
-            long_count: longCount,
-            short_count: shortCount,
-            net_position: longCount - shortCount,
-            max_equity: point.max_equity,
-            max_equity_time: point.max_equity_time,
-            drawdown_days: point.drawdown_days,
-            current_drawdown: point.current_drawdown,
-            max_drawdown: point.max_drawdown
-        };
-    });
-    
-    // 更新表格内容
-    // 当前权益
-    rows[0].innerHTML = `
-        <td>当前权益</td>
-        ${processedData.map(stat => `
-            <td>${formatNumber(stat.current_equity)}</td>
-        `).join('')}
-    `;
-    
-    // 过去一年最高权益
-    rows[1].innerHTML = `
-        <td>过去一年最高权益</td>
-        ${processedData.map(stat => `
-            <td>${formatNumber(stat.max_equity)}</td>
-        `).join('')}
-    `;
-    
-    // 发生时间
-    rows[2].innerHTML = `
-        <td>发生时间</td>
-        ${processedData.map(stat => `
-            <td>${formatDateTime(stat.max_equity_time)}</td>
-        `).join('')}
-    `;
-    
-    // 当前回撤
-    rows[3].innerHTML = `
-        <td>当前回撤</td>
-        ${processedData.map(stat => `
-            <td>${formatPercent(stat.current_drawdown)}</td>
-        `).join('')}
-    `;
-    
-    // 回撤时间
-    rows[4].innerHTML = `
-        <td>回撤时间</td>
-        ${processedData.map(stat => `
-            <td class="${stat.drawdown_days > 90 ? 'text-danger' : ''}">${stat.drawdown_days}天</td>
-        `).join('')}
-    `;
-    
-    // 过去一年最大回撤
-    rows[5].innerHTML = `
-        <td>过去一年最大回撤</td>
-        ${processedData.map(stat => `
-            <td>${formatPercent(stat.max_drawdown)}</td>
-        `).join('')}
-    `;
-    
-    // 品种总数
-    rows[6].innerHTML = `
-        <td>品种总数</td>
-        ${processedData.map(stat => `
-            <td>${stat.contracts_count}</td>
-        `).join('')}
-    `;
-    
-    // 品种多空
-    rows[7].innerHTML = `
-        <td>品种多空</td>
-        ${processedData.map(stat => `
-            <td>${stat.long_count}/${stat.short_count}</td>
-        `).join('')}
-    `;
-    
-    // 净多空
-    rows[8].innerHTML = `
-        <td>净多空</td>
-        ${processedData.map(stat => `
-            <td>${stat.net_position}</td>
-        `).join('')}
-    `;
 }
 
 // 格式化数字

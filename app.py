@@ -285,7 +285,7 @@ def get_filter_contracts(exchange):
         
         results = futures_handler.db.execute_query(sql, (exchange, today))
         
-        # 转数格式
+        # 转数式
         contracts = [{
             'code': row[0],
             'name': row[0]  # 直接使用 fut_code 作为显示名称
@@ -750,7 +750,7 @@ def get_main_contracts():
         latest_date = futures_handler.db.execute_query(date_sql)[0][0]
         print(f"Latest trade date: {latest_date}")
         
-        # 简化 SQL 查询，分两步获取数据
+        # 简化 SQL 查询，分两步取数据
         # 1. 先获取所有合约基本信息
         basic_sql = """
         SELECT ts_code, name, exchange, fut_code
@@ -765,7 +765,7 @@ def get_main_contracts():
         contracts_data = {}
         for row in basic_data:
             ts_code = row[0]
-            # 过掉连续合约和特殊合约
+            # 掉连续合约和特殊合约
             if 'L.' in ts_code or '99.' in ts_code:
                 continue
                 
@@ -798,7 +798,7 @@ def get_main_contracts():
         for contract in contracts_data.values():
             ts_code = contract['ts_code']
             
-            # 获取最新行情数据
+            # 获取新行情数据
             latest_sql = """
             SELECT amount, high, low, pre_close, close, vol, oi
             FROM futures_daily_quotes
@@ -846,7 +846,7 @@ def get_main_contracts():
                 week = week_data[0] if week_data else (0, 0, 0)
                 month = month_data[0] if month_data else (0, 0, 0)
                 
-                # 计算日振幅
+                # 计算日振
                 latest_amplitude = ((float(latest[1] or 0) - float(latest[2] or 0)) / float(latest[3] or 1)) * 100 if latest[3] else 0
                 
                 # 计算周振幅（5日最高最低价之差/最低价）
@@ -1121,7 +1121,7 @@ def update_quotes():
         # 如果数据库已经是最新的，不需要更新
         if db_latest_date_str == latest_available_date:
             futures_handler.update_status['status'] = 'completed'
-            futures_handler.update_status['logs'].append("数据库已经是最新的，无需更新")
+            futures_handler.update_status['logs'].append("数据库已经是最新的，���需更新")
             return jsonify({'status': 'success', 'message': '数据已是最新'})
         
         # 获取所有未到的合约
@@ -1258,6 +1258,142 @@ def update_quotes():
 def fetch_main_quotes():
     print("btn clicked")
     pass
+
+@app.route('/api/monitor/chart-data/<portfolio_id>')
+def get_monitor_chart_data(portfolio_id):
+    try:
+        # 1. 获取组合包含的品种
+        contracts_sql = """
+        SELECT fut_code
+        FROM futures_portfolio_contract
+        WHERE portfolio_id = %s
+        """
+        contracts = futures_handler.db.execute_query(contracts_sql, (portfolio_id,))
+        contract_codes = [code[0].upper() for code in contracts]
+        
+        print(f"Found contracts: {contract_codes}")  # 调试日志
+        
+        if not contract_codes:
+            print("No contracts found")  # 调试日志
+            return jsonify({
+                'status': 'success',
+                'data': {
+                    'chart_data': [],
+                    'statistics': None
+                }
+            })
+            
+        # 2. 获取最近90个交易日14:30的数据
+        data_sql = """
+        WITH time_points AS (
+            SELECT DISTINCT DATE_FORMAT(PriceTime, '%Y-%m-%d %H:%i:%s') as PriceTime
+            FROM tbPriceData
+            WHERE TIME(PriceTime) = '14:30:00'
+            AND PriceTime >= DATE_SUB(NOW(), INTERVAL 90 DAY)
+            ORDER BY PriceTime
+        )
+        SELECT 
+            t1.PriceTime,
+            t1.ProductCode,
+            COALESCE(t1.Equity, 1000000) as Equity
+        FROM time_points tp
+        CROSS JOIN (
+            SELECT DISTINCT ProductCode
+            FROM tbPriceData
+            WHERE ProductCode IN %s
+        ) products
+        LEFT JOIN tbPriceData t1 
+            ON DATE_FORMAT(t1.PriceTime, '%Y-%m-%d %H:%i:%s') = tp.PriceTime 
+            AND t1.ProductCode = products.ProductCode
+        ORDER BY t1.PriceTime, t1.ProductCode
+        """
+        
+        print(f"Executing query for contracts: {contract_codes}")
+        results = futures_handler.db.execute_query(data_sql, (tuple(contract_codes),))
+        print(f"Query returned {len(results)} rows")
+        
+        # 3. 处理数据,按时间点汇总权益
+        chart_data = {}
+        base_equity = len(contract_codes) * 1000000  # 计算基准权益
+        
+        for row in results:
+            if row[0] is None:  # 跳过无效数据
+                continue
+                
+            time_str = row[0].strftime('%Y-%m-%d %H:%M:%S') if isinstance(row[0], datetime.datetime) else row[0]
+            equity = float(row[2] or 1000000)  # 如果没有数据使用初始资金
+            
+            if time_str not in chart_data:
+                chart_data[time_str] = 0
+            chart_data[time_str] += equity
+        
+        # 4. 计算统计指标
+        sorted_data = sorted(chart_data.items())
+        times = [item[0] for item in sorted_data]
+        values = [item[1] for item in sorted_data]
+        
+        if not times:  # 如果没有数据，返回空结果
+            return jsonify({
+                'status': 'success',
+                'data': {
+                    'chart_data': [],
+                    'statistics': None
+                }
+            })
+        
+        # 计算最大权益和时间
+        max_equity = max(values)
+        max_equity_index = values.index(max_equity)
+        max_equity_time = times[max_equity_index]
+        
+        # 计算当前权益和回撤
+        current_equity = values[-1] if values else 0
+        current_drawdown = ((max_equity - current_equity) / base_equity) * 100 if max_equity > 0 else 0
+        
+        # 计算最大回撤
+        max_drawdown = 0
+        min_equity = min(values) if values else 0
+        if max_equity > 0:
+            max_drawdown = ((max_equity - min_equity) / base_equity) * 100
+        
+        # 计算回撤天数
+        drawdown_days = 0
+        if max_equity_index < len(times) - 1:
+            max_time = datetime.datetime.strptime(max_equity_time, '%Y-%m-%d %H:%M:%S')
+            current_time = datetime.datetime.strptime(times[-1], '%Y-%m-%d %H:%M:%S')
+            drawdown_days = (current_time - max_time).days
+        
+        # 5. 转换为图表所需格式
+        data = {
+            'chart_data': [{
+                'time': time_str,
+                'equity': value
+            } for time_str, value in sorted_data],
+            'statistics': {
+                'max_equity': max_equity,
+                'max_equity_time': max_equity_time,
+                'current_equity': current_equity,
+                'min_equity': min_equity,
+                'current_drawdown': current_drawdown,
+                'max_drawdown': max_drawdown,
+                'drawdown_days': drawdown_days,
+                'base_equity': base_equity
+            }
+        }
+        
+        print(f"Processed {len(data['chart_data'])} data points")
+        print(f"Statistics: {data['statistics']}")  # 调试信息
+        
+        return jsonify({
+            'status': 'success',
+            'data': data
+        })
+        
+    except Exception as e:
+        print(f"Error getting chart data: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'status': 'error', 'message': str(e)})
 
 if __name__ == '__main__':
     app.run(
