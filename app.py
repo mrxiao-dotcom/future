@@ -545,7 +545,7 @@ def get_main_contracts():
         for contract in contracts_data.values():
             ts_code = contract['ts_code']
             
-            # 获取新行情数据
+            # 取新行情数据
             latest_sql = """
             SELECT amount, high, low, pre_close, close, vol, oi
             FROM futures_daily_quotes
@@ -748,7 +748,7 @@ def get_contract_details(ts_code):
 # 在 app.py 中添加一个函数来判断是否是主力合约
 def is_main_contract(ts_code, latest_date):
     try:
-        # 获取该品种所有合约的成交额和持仓量
+        # 获取该品种所有合约的成交额持仓量
         base_code = ts_code.split('.')[0][:-4]  # 提取品种代码
         exchange = ts_code.split('.')[1]
         
@@ -901,7 +901,7 @@ def update_quotes():
                 end_date = latest_available_date
                 print(f"获取{ts_code}的数据: {start_date} 到 {end_date}" + ("（主力合约）" if is_main else ""))
                 
-                # 只有在需要更新数据时才调用API
+                # 有在需要更新数据时才调用API
                 if start_date <= end_date:
                     df = futures_handler._call_tushare_api(
                         futures_handler.pro.fut_daily,
@@ -911,7 +911,7 @@ def update_quotes():
                     )
                     
                     if not df.empty:
-                        print(f"获取到{ts_code}的{len(df)}条数据")
+                        print(f"获取到{ts_code}的{len(df)}条据")
                         # 保存数据
                         insert_sql = """
                         INSERT INTO futures_daily_quotes 
@@ -1123,6 +1123,240 @@ def get_monitor_chart_data(portfolio_id):
         print(f"Error getting chart data: {str(e)}")
         import traceback
         traceback.print_exc()
+        return jsonify({'status': 'error', 'message': str(e)})
+
+@app.route('/api/track/component-curves', methods=['POST'])
+def get_component_curves():
+    try:
+        data = request.get_json()
+        components = [comp.lower() for comp in data.get('components', [])]  # 转换为小写
+        
+        if not components:
+            return jsonify({
+                'status': 'error',
+                'message': '未选择品种'
+            })
+            
+        # 修改查询范围为365天
+        curves_sql = """
+        SELECT 
+            PriceTime,
+            ProductCode,
+            Equity
+        FROM tbpricedata
+        WHERE LOWER(ProductCode) IN %s
+        AND TIME(PriceTime) = '14:30:00'
+        AND PriceTime >= DATE_SUB(NOW(), INTERVAL 365 DAY)
+        ORDER BY PriceTime, ProductCode
+        """
+        
+        results = futures_handler.db.execute_query(curves_sql, (tuple(components),))
+        
+        # 处理数据
+        times = []
+        curves = {component.upper(): [] for component in components}  # 使用大写作为键
+        statistics = {component.upper(): {  # 使用大写作为键
+            'current_equity': 0,
+            'max_equity': 0,
+            'max_equity_time': None,
+            'current_drawdown': 0,
+            'max_drawdown': 0,
+            'drawdown_days': 0
+        } for component in components}
+        
+        for row in results:
+            time_str = row[0].strftime('%Y-%m-%d %H:%M:%S')
+            component = row[1].upper()  # 转换为大写
+            equity = float(row[2] or 0)
+            
+            if time_str not in times:
+                times.append(time_str)
+            
+            if component.lower() in components:  # 使用小写比较
+                curves[component].append(equity)
+                
+                # 更新统计数据
+                stats = statistics[component]
+                if equity > stats['max_equity']:
+                    stats['max_equity'] = equity
+                    stats['max_equity_time'] = time_str
+                
+                stats['current_equity'] = equity
+                if stats['max_equity'] > 0:
+                    current_drawdown = ((stats['max_equity'] - equity) / stats['max_equity']) * 100
+                    stats['current_drawdown'] = current_drawdown
+                    stats['max_drawdown'] = max(stats['max_drawdown'], current_drawdown)
+                
+                if stats['max_equity_time']:
+                    max_time = datetime.datetime.strptime(stats['max_equity_time'], '%Y-%m-%d %H:%M:%S')
+                    current_time = datetime.datetime.strptime(time_str, '%Y-%m-%d %H:%M:%S')
+                    stats['drawdown_days'] = (current_time - max_time).days
+        
+        return jsonify({
+            'status': 'success',
+            'data': {
+                'times': times,
+                'components': [comp.upper() for comp in components],  # 返回大写的品种代码
+                'curves': curves,
+                'statistics': statistics
+            }
+        })
+        
+    except Exception as e:
+        print(f"Error getting component curves: {str(e)}")
+        return jsonify({'status': 'error', 'message': str(e)})
+
+@app.route('/api/track/portfolio-curves', methods=['POST'])
+def get_portfolio_curves():
+    try:
+        data = request.get_json()
+        portfolio_ids = data.get('portfolios', [])
+        
+        if not portfolio_ids:
+            return jsonify({
+                'status': 'error',
+                'message': '未选择组合'
+            })
+        
+        # 获取组合名称
+        portfolios_sql = """
+        SELECT id, portfolio_name
+        FROM futures_portfolio
+        WHERE id IN %s
+        """
+        
+        portfolio_results = futures_handler.db.execute_query(
+            portfolios_sql, 
+            (tuple(portfolio_ids),)
+        )
+        
+        portfolio_names = {str(row[0]): row[1] for row in portfolio_results}
+        
+        # 获取组合的资金曲线数据
+        curves_data = {}
+        statistics = {}
+        all_times = set()
+        
+        for portfolio_id in portfolio_ids:
+            # 获取组合包含的品种
+            contracts_sql = """
+            SELECT fut_code
+            FROM futures_portfolio_contract
+            WHERE portfolio_id = %s
+            """
+            
+            contracts = futures_handler.db.execute_query(contracts_sql, (portfolio_id,))
+            contract_codes = [code[0].upper() for code in contracts]
+            
+            if not contract_codes:
+                continue
+            
+            # 修改查询范围为365天
+            curves_sql = """
+            SELECT 
+                PriceTime,
+                ProductCode,
+                COALESCE(Equity, 1000000) as equity
+            FROM tbpricedata
+            WHERE ProductCode IN %s
+            AND TIME(PriceTime) = '14:30:00'
+            AND PriceTime >= DATE_SUB(NOW(), INTERVAL 365 DAY)
+            ORDER BY PriceTime
+            """
+            
+            results = futures_handler.db.execute_query(curves_sql, (tuple(contract_codes),))
+            
+            # 处理数据
+            portfolio_curve = {}
+            max_equity = 0  # 改为 0 而不是 -inf
+            max_equity_time = None
+            
+            for row in results:
+                time_str = row[0].strftime('%Y-%m-%d %H:%M:%S')
+                equity = float(row[2] or 0)
+                
+                all_times.add(time_str)
+                
+                if time_str not in portfolio_curve:
+                    portfolio_curve[time_str] = 0
+                portfolio_curve[time_str] += equity
+                
+                if portfolio_curve[time_str] > max_equity:
+                    max_equity = portfolio_curve[time_str]
+                    max_equity_time = time_str
+            
+            # 计算统计数据
+            portfolio_name = portfolio_names[str(portfolio_id)]
+            current_equity = portfolio_curve[max(portfolio_curve.keys())] if portfolio_curve else 0
+            
+            current_drawdown = 0
+            max_drawdown = 0
+            drawdown_days = 0
+            
+            if max_equity > 0:
+                current_drawdown = ((max_equity - current_equity) / max_equity) * 100
+                max_drawdown = current_drawdown
+                
+                if max_equity_time:
+                    max_time = datetime.datetime.strptime(max_equity_time, '%Y-%m-%d %H:%M:%S')
+                    current_time = datetime.datetime.strptime(max(portfolio_curve.keys()), '%Y-%m-%d %H:%M:%S')
+                    drawdown_days = (current_time - max_time).days
+            
+            curves_data[portfolio_name] = portfolio_curve
+            statistics[portfolio_name] = {
+                'current_equity': current_equity,
+                'max_equity': max_equity,
+                'max_equity_time': max_equity_time,
+                'current_drawdown': current_drawdown,
+                'max_drawdown': max_drawdown,
+                'drawdown_days': drawdown_days
+            }
+        
+        # 整理时间序列
+        sorted_times = sorted(all_times)
+        
+        # 整理曲线数据
+        curves = {
+            name: [curve.get(t, None) for t in sorted_times]
+            for name, curve in curves_data.items()
+        }
+        
+        return jsonify({
+            'status': 'success',
+            'data': {
+                'times': sorted_times,
+                'portfolios': list(portfolio_names.values()),
+                'curves': curves,
+                'statistics': statistics
+            }
+        })
+        
+    except Exception as e:
+        print(f"Error getting portfolio curves: {str(e)}")
+        return jsonify({'status': 'error', 'message': str(e)})
+
+@app.route('/api/portfolios/<int:portfolio_id>/contracts/details')
+def get_portfolio_contracts_details(portfolio_id):
+    try:
+        # 简化SQL查询，直接从 futures_portfolio_contract 表获取数据
+        sql = """
+        SELECT fut_code
+        FROM futures_portfolio_contract
+        WHERE portfolio_id = %s
+        ORDER BY fut_code
+        """
+        
+        results = futures_handler.db.execute_query(sql, (portfolio_id,))
+        contracts = [{
+            'fut_code': row[0].upper()  # 只返回品种代码，转换为大写
+        } for row in results]
+        
+        return jsonify({
+            'status': 'success',
+            'data': contracts
+        })
+    except Exception as e:
+        print(f"Error getting portfolio contracts: {str(e)}")
         return jsonify({'status': 'error', 'message': str(e)})
 
 if __name__ == '__main__':

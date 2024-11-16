@@ -12,11 +12,8 @@ document.addEventListener('DOMContentLoaded', function() {
             console.log('Delayed chart initialization...');
             initCharts();
         }, 100);
-    }
-    
-    // 初始化组合管理功能
-    if (filterTab) {
-        console.log('Initializing portfolio management...');
+        
+        // 初始化组合管理功能
         initializePortfolioManagement();
     }
     
@@ -469,7 +466,7 @@ async function loadInstitutionHoldings(tsCode, contractName) {
     }
 }
 
-// 格式化��期显示
+// 格式化期显示
 function formatDate(dateStr) {
     const date = new Date(dateStr);
     return date.toLocaleDateString('zh-CN', {
@@ -776,7 +773,7 @@ async function generateEquityCurve() {
                 }]
             });
             
-            // 更新统计数据
+            // ��新统计数据
             updateStatistics(data.data.statistics);
             
             // 强制重绘图表
@@ -791,7 +788,7 @@ async function generateEquityCurve() {
     }
 }
 
-// 更新统计数据
+// ��新统计数据
 function updateStatistics(statistics) {
     document.getElementById('maxEquity').textContent = formatNumber(statistics.max_equity);
     document.getElementById('maxEquityTime').textContent = statistics.max_equity_time;
@@ -894,24 +891,11 @@ function initializePortfolioManagement() {
     // 加载组合列表
     loadPortfolios();
     
-    // 添加保存组合按钮事件
-    document.getElementById('savePortfolio').addEventListener('click', savePortfolio);
-    
-    // 监听组合名称和手动输入框变化
-    const portfolioName = document.getElementById('portfolioName');
-    const manualContracts = document.getElementById('manualContracts');
-    const saveBtn = document.getElementById('savePortfolio');
-    
-    function updateSaveButtonState() {
-        const hasName = portfolioName.value.trim() !== '';
-        const hasSelectedContracts = document.querySelectorAll('.selected-contracts .list-group-item').length > 0;
-        const hasManualContracts = manualContracts.value.trim() !== '';
-        
-        saveBtn.disabled = !hasName || (!hasSelectedContracts && !hasManualContracts);
+    // 添加保存组合按钮的事件监听
+    const saveButton = document.getElementById('savePortfolio');
+    if (saveButton) {
+        saveButton.addEventListener('click', savePortfolio);
     }
-    
-    portfolioName.addEventListener('input', updateSaveButtonState);
-    manualContracts.addEventListener('input', updateSaveButtonState);
 }
 
 // 加载组合列表
@@ -976,7 +960,7 @@ async function savePortfolio() {
     if (manualInput) {
         // 处理多种分隔符：半角逗号、全角逗号、空格
         manualContracts = manualInput
-            .replace(/，/g, ',')  // 换全角逗号为半角逗号
+            .replace(/，/g, ',')  // 替换全角逗号为半角逗号
             .split(/[,\s]+/)      // 按逗号或空格分割
             .map(code => code.trim().toUpperCase())  // 转换为大写并去除空格
             .filter(code => code); // 过滤空值
@@ -991,7 +975,7 @@ async function savePortfolio() {
     }
     
     if (allContracts.length === 0) {
-        alert('请少选择或输入一个合约');
+        alert('请至少选择或输入一个合约');
         return;
     }
     
@@ -1016,7 +1000,7 @@ async function savePortfolio() {
         if (data.status === 'success') {
             alert(data.message);  // 显示成功消息
             document.getElementById('portfolioName').value = '';  // 清空组合名称
-            document.getElementById('manualContracts').value = '';  // 清手动输入
+            document.getElementById('manualContracts').value = '';  // 清空手动输入
             loadPortfolios();  // 重新加载组合列表
         } else {
             alert(data.message || '保存失败');
@@ -1053,7 +1037,7 @@ async function loadPortfolioContracts(portfolioId) {
                 });
             });
             
-            // 更新手动输入框，使用半角逗号分隔
+            // 新手动输入框，使用半角逗号分隔
             document.getElementById('manualContracts').value = 
                 data.data.map(contract => contract.fut_code).join(', ');
                 
