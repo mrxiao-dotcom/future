@@ -6,15 +6,6 @@ document.addEventListener('DOMContentLoaded', function() {
     if (filterTab) {
         console.log('Initializing filter module...');
         initializeFilterModule();
-        
-        // 延迟初始化图表，确保容器已经渲染
-        setTimeout(() => {
-            console.log('Delayed chart initialization...');
-            initCharts();
-        }, 100);
-        
-        // 初始化组合管理功能
-        initializePortfolioManagement();
     }
     
     // 初始化监控功能
@@ -555,7 +546,12 @@ function initializeFilterModule() {
     document.querySelector('.add-contract').addEventListener('click', () => moveSelectedContracts('add'));
     document.querySelector('.remove-contract').addEventListener('click', () => moveSelectedContracts('remove'));
     document.querySelector('.clear-selected').addEventListener('click', clearSelectedContracts);
-    document.querySelector('.generate-equity').addEventListener('click', generateEquityCurve);
+    
+    // 加载初始权益数据
+    loadInitialEquityData();
+
+    // 初始化组合管理功能
+    initializePortfolioManagement();
 
     // 添加标签页切换事件
     document.querySelectorAll('#filterExchangeTabs button[data-bs-toggle="tab"]').forEach(button => {
@@ -584,310 +580,10 @@ function initializeFilterModule() {
     });
 }
 
-// 清除所有已选合约
-function clearSelectedContracts() {
-    if (!confirm('确定要清除所有已选合约吗？')) {
-        return;
-    }
-    
-    const selectedContainer = document.querySelector('.selected-contracts');
-    const currentExchange = document.querySelector('#filterExchangeTabs .active')
-        .dataset.bsTarget.replace('#filter-', '');
-        
-    // 获取所有已选合约
-    const selectedItems = selectedContainer.querySelectorAll('.list-group-item');
-    
-    // 将所有合约移回备选列表
-    selectedItems.forEach(item => {
-        const availableContainer = document.querySelector(
-            `.available-contracts[data-exchange="${currentExchange}"]`
-        );
-        
-        // 检查备选列表中是否已存该合约
-        const existingItem = availableContainer.querySelector(
-            `[data-contract-code="${item.dataset.contractCode}"]`
-        );
-        
-        if (!existingItem) {
-            // 创建新的列表项
-            const newItem = item.cloneNode(true);
-            newItem.classList.remove('active');  // 移除选中状态
-            
-            // 添加点击事件
-            newItem.addEventListener('click', function() {
-                availableContainer.querySelectorAll('.list-group-item').forEach(otherItem => {
-                    if (otherItem !== this) {
-                        otherItem.classList.remove('active');
-                    }
-                });
-                this.classList.toggle('active');
-            });
-            
-            availableContainer.appendChild(newItem);
-        }
-    });
-    
-    // 清空已选列表
-    selectedContainer.innerHTML = '';
-}
-
-// 保存图表实例的映射
-const chartInstances = new Map();
-
-// 加载可选合约
-async function loadAvailableContracts(exchange) {
-    try {
-        const response = await fetch(`/api/filter-contracts/${exchange}`);
-        const data = await response.json();
-        
-        if (data.status === 'success') {
-            const container = document.querySelector(`.available-contracts[data-exchange="${exchange}"]`);
-            const selectedContainer = document.querySelector('.selected-contracts');
-            
-            // 获取已选合约的代码列表
-            const selectedCodes = Array.from(selectedContainer.querySelectorAll('.list-group-item'))
-                .map(item => item.dataset.contractCode);
-            
-            // 过滤掉已选的合约
-            const availableContracts = data.data.filter(contract => 
-                !selectedCodes.includes(contract.code)
-            );
-            
-            // 更新备选列表
-            container.innerHTML = availableContracts.map(contract => `
-                <div class="list-group-item" 
-                     data-contract-code="${contract.code}"
-                     data-contract-name="${contract.name}">
-                    ${contract.name}
-                </div>
-            `).join('');
-            
-            // 添加点击事件
-            container.querySelectorAll('.list-group-item').forEach(item => {
-                item.addEventListener('click', function() {
-                    // 移除同组中其他项目的选中状态
-                    container.querySelectorAll('.list-group-item').forEach(otherItem => {
-                        if (otherItem !== this) {
-                            otherItem.classList.remove('active');
-                        }
-                    });
-                    // 切换当前项目的选中状态
-                    this.classList.toggle('active');
-                });
-            });
-        }
-    } catch (error) {
-        console.error('Error loading contracts:', error);
-    }
-}
-
-// 移动选中的合约
-function moveSelectedContracts(action) {
-    const currentExchange = document.querySelector('#filterExchangeTabs .active').dataset.bsTarget.replace('#filter-', '');
-    const sourceContainer = action === 'add' 
-        ? document.querySelector(`.available-contracts[data-exchange="${currentExchange}"]`)
-        : document.querySelector('.selected-contracts');
-        
-    const targetContainer = action === 'add'
-        ? document.querySelector('.selected-contracts')
-        : document.querySelector(`.available-contracts[data-exchange="${currentExchange}"]`);
-    
-    const selectedItems = sourceContainer.querySelectorAll('.list-group-item.active');
-    
-    selectedItems.forEach(item => {
-        // 检查目标容器中是否已存在该品种
-        const existingItem = targetContainer.querySelector(`[data-contract-name="${item.dataset.contractName}"]`);
-        if (!existingItem) {
-            // 移除选中状态
-            item.classList.remove('active');
-            // 移动到目标容器
-            const newItem = item.cloneNode(true);
-            targetContainer.appendChild(newItem);
-            // 为移动后的项目添加点击事件
-            newItem.addEventListener('click', function() {
-                this.classList.toggle('active');
-            });
-        }
-    });
-    
-    // 移除原始选中项的选中状态或删除
-    if (action === 'add') {
-        selectedItems.forEach(item => item.classList.remove('active'));
-    } else {
-        selectedItems.forEach(item => item.remove());
-    }
-}
-
-// 生成净值曲线
-async function generateEquityCurve() {
-    try {
-        console.log('Generating equity curve...');
-        // 获取已选合约列表
-        const selectedItems = document.querySelectorAll('.selected-contracts .list-group-item');
-        const contracts = Array.from(selectedItems).map(item => item.dataset.contractCode);
-        
-        if (contracts.length === 0) {
-            alert('请先选择合约');
-            return;
-        }
-        
-        console.log('Selected contracts:', contracts);
-        
-        // 获取净值数据
-        const response = await fetch('/api/equity-data', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ contracts })
-        });
-        
-        const data = await response.json();
-        console.log('Received data:', data);
-        
-        if (data.status === 'success') {
-            // 获取图表实例
-            const chart = chartInstances.get('equity');
-            if (!chart) {
-                console.error('Chart instance not found');
-                return;
-            }
-            
-            // 准备数据
-            const times = data.data.equity_curve.map(item => item.time);
-            const values = data.data.equity_curve.map(item => item.equity);
-            
-            console.log('Updating chart with data points:', values.length);
-            
-            // 更新图表配置
-            chart.setOption({
-                xAxis: {
-                    data: times
-                },
-                yAxis: {
-                    min: data.data.statistics.y_axis_min,
-                    max: data.data.statistics.y_axis_max
-                },
-                series: [{
-                    data: values
-                }]
-            });
-            
-            // ��新统计数据
-            updateStatistics(data.data.statistics);
-            
-            // 强制重绘图表
-            chart.resize();
-        } else {
-            alert(data.message || '获取数据失败');
-        }
-        
-    } catch (error) {
-        console.error('Error generating equity curve:', error);
-        alert('生成净值曲线失败');
-    }
-}
-
-// ��新统计数据
-function updateStatistics(statistics) {
-    document.getElementById('maxEquity').textContent = formatNumber(statistics.max_equity);
-    document.getElementById('maxEquityTime').textContent = statistics.max_equity_time;
-    document.getElementById('drawdownDays').innerHTML = formatDrawdownDays(statistics.drawdown_days);
-    document.getElementById('minEquity').textContent = formatNumber(statistics.min_equity);
-    document.getElementById('currentEquity').textContent = formatNumber(statistics.current_equity);
-    document.getElementById('currentDrawdown').textContent = formatPercent(statistics.current_drawdown);
-    document.getElementById('maxDrawdown').textContent = formatPercent(statistics.max_drawdown);
-}
-
-// 格式化数字
-function formatNumber(num) {
-    return num.toLocaleString('zh-CN', { maximumFractionDigits: 0 });
-}
-
-// 格式化百分比
-function formatPercent(value) {
-    return value.toFixed(2) + '%';
-}
-
-// 格式化回撤天数
-function formatDrawdownDays(days) {
-    return days > 90 ? `<span class="text-danger">${days}天</span>` : `${days}天`;
-}
-
-// 初始化图表
-function initCharts() {
-    console.log('Initializing charts...');
-    const chartContainer = document.querySelector('.equity-chart');
-    if (!chartContainer) {
-        console.warn('Chart container not found');
-        return;
-    }
-    
-    try {
-        // 创建图表实例
-        const chart = echarts.init(chartContainer);
-        chartInstances.set('equity', chart);
-        console.log('Chart instance created');
-        
-        // 设置初始配置
-        const option = {
-            tooltip: {
-                trigger: 'axis',
-                formatter: function(params) {
-                    const time = params[0].axisValue;
-                    const value = params[0].data;
-                    return `${time}<br/>净值：${value.toLocaleString('zh-CN')}`;
-                }
-            },
-            grid: {
-                left: '3%',
-                right: '4%',
-                bottom: '3%',
-                containLabel: true
-            },
-            xAxis: {
-                type: 'category',
-                data: [],
-                axisLabel: {
-                    rotate: 45
-                }
-            },
-            yAxis: {
-                type: 'value',
-                name: '净值',
-                scale: true
-            },
-            series: [{
-                data: [],
-                type: 'line',
-                smooth: true,
-                name: '净值',
-                lineStyle: {
-                    width: 2
-                },
-                areaStyle: {
-                    opacity: 0.1
-                }
-            }]
-        };
-        
-        chart.setOption(option);
-        console.log('Chart option set');
-        
-        // 添加窗口大小变化的监听
-        window.addEventListener('resize', () => {
-            console.log('Window resized, resizing chart...');
-            chart.resize();
-        });
-        
-        return chart;
-    } catch (error) {
-        console.error('Error initializing chart:', error);
-    }
-}
-
 // 初始化组合管理功能
 function initializePortfolioManagement() {
+    console.log('Initializing portfolio management...');
+    
     // 加载组合列表
     loadPortfolios();
     
@@ -895,6 +591,7 @@ function initializePortfolioManagement() {
     const saveButton = document.getElementById('savePortfolio');
     if (saveButton) {
         saveButton.addEventListener('click', savePortfolio);
+        console.log('Save portfolio button listener added');
     }
 }
 
@@ -919,14 +616,18 @@ async function loadPortfolios() {
             
             // 添加双击事件
             container.querySelectorAll('.portfolio-name').forEach(item => {
-                item.addEventListener('dblclick', function() {
+                item.addEventListener('dblclick', async function() {
+                    console.log('Portfolio double clicked');
                     const portfolioId = this.parentElement.dataset.portfolioId;
                     const portfolioName = this.parentElement.dataset.portfolioName;
                     
                     // 加载组合合约
                     loadPortfolioContracts(portfolioId);
                     
-                    // 更新组合名称入框
+                    // 加载组合历史权益数据
+                    await loadPortfolioEquityHistory(portfolioId);
+                    
+                    // 更新组合名称输入框
                     document.getElementById('portfolioName').value = portfolioName;
                 });
             });
@@ -943,6 +644,52 @@ async function loadPortfolios() {
     } catch (error) {
         console.error('Error loading portfolios:', error);
     }
+}
+
+// 加载组合历史权益数据
+async function loadPortfolioEquityHistory(portfolioId) {
+    try {
+        console.log('Loading equity history for portfolio:', portfolioId);
+        const response = await fetch(`/api/portfolio-history/${portfolioId}`);
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+            const tbody = document.getElementById('portfolioHistoryTable');
+            if (!tbody) {
+                console.error('Portfolio history table not found');
+                return;
+            }
+            
+            // 按时间倒序排列
+            const sortedHistory = data.data.sort((a, b) => 
+                new Date(b.time) - new Date(a.time)
+            );
+            
+            // 更新表格内容
+            tbody.innerHTML = sortedHistory.map(record => `
+                <tr>
+                    <td>${formatDateTime(record.time)}</td>
+                    <td class="text-end">${formatNumber(record.total_equity)}</td>
+                </tr>
+            `).join('');
+            
+            console.log(`Updated history table with ${sortedHistory.length} records`);
+        }
+    } catch (error) {
+        console.error('Error loading portfolio equity history:', error);
+    }
+}
+
+// 格式化日期时间
+function formatDateTime(dateStr) {
+    const date = new Date(dateStr);
+    return `${date.getMonth() + 1}/${date.getDate()} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+}
+
+// 格式化数字
+function formatNumber(num) {
+    if (!num) return '-';
+    return num.toLocaleString('zh-CN', { maximumFractionDigits: 0 });
 }
 
 // 保存组合
@@ -999,7 +746,7 @@ async function savePortfolio() {
         const data = await response.json();
         if (data.status === 'success') {
             alert(data.message);  // 显示成功消息
-            document.getElementById('portfolioName').value = '';  // 清空组合名称
+            document.getElementById('portfolioName').value = '';  // 清组合名称
             document.getElementById('manualContracts').value = '';  // 清空手动输入
             loadPortfolios();  // 重新加载组合列表
         } else {
@@ -1051,7 +798,7 @@ async function loadPortfolioContracts(portfolioId) {
     }
 }
 
-// 删除组合
+// 除组合
 async function deletePortfolio(portfolioId, portfolioName) {
     if (!confirm(`确定要删除组合"${portfolioName}"吗？`)) {
         return;
@@ -1159,5 +906,256 @@ function startUpdate(url) {
         console.error('Error starting update:', error);
         showError(error.message);
         resetUpdateButtons();
+    });
+}
+
+// 加载备选合约列表
+async function loadAvailableContracts(exchange) {
+    try {
+        const response = await fetch(`/api/filter-contracts/${exchange}`);
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+            const container = document.querySelector(`.available-contracts[data-exchange="${exchange}"]`);
+            const selectedContainer = document.querySelector('.selected-contracts');
+            
+            // 获取已选合约的代码列表
+            const selectedCodes = Array.from(selectedContainer.querySelectorAll('.list-group-item'))
+                .map(item => item.dataset.contractCode);
+            
+            // 过滤掉已选的合约
+            const availableContracts = data.data.filter(contract => 
+                !selectedCodes.includes(contract.code)
+            );
+            
+            // 更新备选列表
+            container.innerHTML = availableContracts.map(contract => `
+                <div class="list-group-item" 
+                     data-contract-code="${contract.code}"
+                     data-contract-name="${contract.name}">
+                    ${contract.name}
+                </div>
+            `).join('');
+            
+            // 添加点击事件
+            container.querySelectorAll('.list-group-item').forEach(item => {
+                item.addEventListener('click', function() {
+                    this.classList.toggle('active');
+                });
+            });
+        }
+    } catch (error) {
+        console.error('Error loading contracts:', error);
+    }
+}
+
+// 移动选中的合约
+function moveSelectedContracts(action) {
+    const currentExchange = document.querySelector('#filterExchangeTabs .active').dataset.bsTarget.replace('#filter-', '');
+    const sourceContainer = action === 'add' 
+        ? document.querySelector(`.available-contracts[data-exchange="${currentExchange}"]`)
+        : document.querySelector('.selected-contracts');
+        
+    const targetContainer = action === 'add'
+        ? document.querySelector('.selected-contracts')
+        : document.querySelector(`.available-contracts[data-exchange="${currentExchange}"]`);
+    
+    const selectedItems = sourceContainer.querySelectorAll('.list-group-item.active');
+    
+    selectedItems.forEach(item => {
+        // 检查目标容器中是否已存在该品种
+        const existingItem = targetContainer.querySelector(`[data-contract-name="${item.dataset.contractName}"]`);
+        if (!existingItem) {
+            // 移除选中状态
+            item.classList.remove('active');
+            // 移动到目标容器
+            const newItem = item.cloneNode(true);
+            targetContainer.appendChild(newItem);
+            // 为移动后的项目添加点击事件
+            newItem.addEventListener('click', function() {
+                this.classList.toggle('active');
+            });
+        }
+    });
+    
+    // 移除原始选中项的选中状态或删除
+    if (action === 'add') {
+        selectedItems.forEach(item => item.classList.remove('active'));
+    } else {
+        selectedItems.forEach(item => item.remove());
+    }
+}
+
+// 清空已选合约
+function clearSelectedContracts() {
+    const selectedContainer = document.querySelector('.selected-contracts');
+    if (selectedContainer) {
+        selectedContainer.innerHTML = '';
+        
+        // 重新加载当前交易所的备选合约列表
+        const currentExchange = document.querySelector('#filterExchangeTabs .active')
+            .dataset.bsTarget.replace('#filter-', '');
+        loadAvailableContracts(currentExchange);
+    }
+}
+
+// 生成权益数据
+async function generateEquityCurve() {
+    try {
+        console.log('Generating equity data...');
+        // 获取已选合约列表
+        const selectedItems = document.querySelectorAll('.selected-contracts .list-group-item');
+        const contracts = Array.from(selectedItems).map(item => item.dataset.contractCode);
+        
+        if (contracts.length === 0) {
+            alert('请先选择合约');
+            return;
+        }
+        
+        console.log('Selected contracts:', contracts);
+        
+        // 获取权益数据
+        const response = await fetch('/api/equity-data', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ contracts })
+        });
+        
+        const data = await response.json();
+        console.log('Received data:', data);
+        
+        if (data.status === 'success') {
+            // 更新最新权益数据表格
+            updateLatestEquityTable(data.data.latest_equity);
+            
+            // 更新上一时间权益数据表格
+            updatePreviousEquityTable(data.data.previous_equity);
+            
+            // 添加表头点击排序功能
+            addSortingFunctionality();
+        } else {
+            alert(data.message || '获取数据失败');
+        }
+        
+    } catch (error) {
+        console.error('Error generating equity data:', error);
+        alert('生成权益数据失败');
+    }
+}
+
+// 加载初始权益数据
+async function loadInitialEquityData() {
+    try {
+        console.log('Loading initial equity data...');
+        const response = await fetch('/api/initial-equity-data');
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+            // 更新最新权益数据表格
+            updateLatestEquityTable(data.data.latest_equity);
+            
+            // 更新上一时间权益数据表格
+            updatePreviousEquityTable(data.data.previous_equity);
+            
+            // 添加表头点击排序功能
+            addSortingFunctionality();
+            
+            console.log('Initial equity data loaded');
+        }
+    } catch (error) {
+        console.error('Error loading initial equity data:', error);
+    }
+}
+
+// 更新最新权益数据表格
+function updateLatestEquityTable(data) {
+    const tbody = document.getElementById('latestEquityTable');
+    const timeSpan = document.getElementById('latestTime');
+    
+    if (!data || !data.time || !data.equities) return;
+    
+    timeSpan.textContent = formatDateTime(data.time);
+    
+    // 转换为数组并排序
+    const sortedData = Object.entries(data.equities)
+        .map(([code, equity]) => ({ code, equity }))
+        .sort((a, b) => b.equity - a.equity);  // 默认从高到低排序
+    
+    tbody.innerHTML = sortedData.map((item, index) => {
+        // 每5行使用一次浅蓝色背景
+        const bgClass = index < 30 && index % 5 === 0 ? 'bg-info bg-opacity-10' : '';
+        
+        return `
+            <tr class="${bgClass}">
+                <td>${item.code}</td>
+                <td class="text-end">${formatNumber(item.equity)}</td>
+            </tr>
+        `;
+    }).join('');
+}
+
+// 更新上一时间权益数据表格
+function updatePreviousEquityTable(data) {
+    const tbody = document.getElementById('previousEquityTable');
+    const timeSpan = document.getElementById('previousTime');
+    
+    if (!data || !data.time || !data.equities) return;
+    
+    timeSpan.textContent = formatDateTime(data.time);
+    
+    // 转换为数组并排序
+    const sortedData = Object.entries(data.equities)
+        .map(([code, equity]) => ({ code, equity }))
+        .sort((a, b) => b.equity - a.equity);  // 默认从高到低排序
+    
+    tbody.innerHTML = sortedData.map((item, index) => {
+        // 每5行使用一次浅蓝色背景
+        const bgClass = index < 30 && index % 5 === 0 ? 'bg-info bg-opacity-10' : '';
+        
+        return `
+            <tr class="${bgClass}">
+                <td>${item.code}</td>
+                <td class="text-end">${formatNumber(item.equity)}</td>
+            </tr>
+        `;
+    }).join('');
+}
+
+// 修改排序功能以保持背景色
+function addSortingFunctionality() {
+    document.querySelectorAll('.sortable').forEach(header => {
+        header.addEventListener('click', function() {
+            const table = this.closest('table');
+            const tbody = table.querySelector('tbody');
+            const rows = Array.from(tbody.querySelectorAll('tr'));
+            const column = this.cellIndex;
+            const isAsc = !this.classList.contains('sort-asc');
+            
+            // 移除所有排序标记
+            table.querySelectorAll('.sortable').forEach(h => {
+                h.classList.remove('sort-asc', 'sort-desc');
+            });
+            
+            // 添加新的排序标记
+            this.classList.add(isAsc ? 'sort-asc' : 'sort-desc');
+            
+            // 排序行
+            rows.sort((a, b) => {
+                const aValue = parseFloat(a.cells[column].textContent.replace(/[^\d.-]/g, ''));
+                const bValue = parseFloat(b.cells[column].textContent.replace(/[^\d.-]/g, ''));
+                return isAsc ? aValue - bValue : bValue - aValue;
+            });
+            
+            // 重新插入排序后的行，并更新背景色
+            tbody.innerHTML = '';
+            rows.forEach((row, index) => {
+                // 每5行使用一次浅蓝色背景
+                const bgClass = index < 30 && index % 5 === 0 ? 'bg-info bg-opacity-10' : '';
+                row.className = bgClass;
+                tbody.appendChild(row);
+            });
+        });
     });
 }

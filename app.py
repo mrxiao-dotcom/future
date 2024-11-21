@@ -51,7 +51,6 @@ def get_filter_contracts(exchange):
 def get_equity_data():
     try:
         data = request.get_json()
-        # 统一转换为大写
         contracts = [contract.upper() for contract in data.get('contracts', [])]
         
         if not contracts:
@@ -59,123 +58,64 @@ def get_equity_data():
                 'status': 'error',
                 'message': '未选择合约'
             })
-            
-        # 1. 获取每天14:30的数据 - 修改表名为 tbpricedata
+        
+        # 获取最新和上一个时间点的数据
         sql = """
+        WITH latest_time AS (
+            SELECT MAX(PriceTime) as max_time
+            FROM tbpricedata
+            WHERE TIME(PriceTime) = '14:30:00'
+        ),
+        previous_time AS (
+            SELECT MAX(PriceTime) as prev_time
+            FROM tbpricedata
+            WHERE TIME(PriceTime) = '14:30:00'
+            AND PriceTime < (SELECT max_time FROM latest_time)
+        )
         SELECT 
-            CONCAT(DATE(PriceTime), ' 14:30:00') as PriceTime,
-            ProductCode,
-            Equity
-        FROM tbpricedata
-        WHERE ProductCode IN %s
-        AND PriceTime >= DATE_SUB(NOW(), INTERVAL 1 YEAR)
-        AND TIME(PriceTime) = '14:30:00'
-        ORDER BY PriceTime
+            t.PriceTime,
+            t.ProductCode,
+            t.Equity
+        FROM tbpricedata t
+        WHERE t.ProductCode IN %s
+        AND t.PriceTime IN (
+            (SELECT max_time FROM latest_time),
+            (SELECT prev_time FROM previous_time)
+        )
+        ORDER BY t.PriceTime DESC, t.ProductCode
         """
         
-        print(f"Querying data for contracts: {contracts}")
         results = futures_handler.db.execute_query(sql, (tuple(contracts),))
         
-        if not results:
-            return jsonify({
-                'status': 'success',
-                'data': {
-                    'equity_curve': [],
-                    'statistics': None
-                }
-            })
+        # 处理数据
+        latest_data = {'time': None, 'equities': {}}
+        previous_data = {'time': None, 'equities': {}}
         
-        # 创建数据字典，用于快速查找
-        equity_dict = {}
-        last_equity = {code: 0 for code in contracts}  # 记录每个合约的最新净值
-        first_equity = {code: None for code in contracts}  # 记录每个合约的首次出现时间
-        
-        # 记录每个合约的数据情况
         for row in results:
-            time_point = row[0]  # 已经是格式化的字符串
-            product_code = row[1].upper()  # 统一转换为大写
+            time_str = row[0].strftime('%Y-%m-%d %H:%M:%S')
+            code = row[1]
             equity = float(row[2] or 0)
             
-            if time_point not in equity_dict:
-                equity_dict[time_point] = {}
-            
-            equity_dict[time_point][product_code] = equity
-            last_equity[product_code] = equity
-            
-            # 记录首次出现的净值
-            if first_equity[product_code] is None:
-                first_equity[product_code] = time_point
-        
-        # 生成净值曲线数据
-        equity_data = []
-        max_equity = float('-inf')
-        min_equity = float('inf')
-        current_equity = 0
-        max_equity_time = None
-        
-        for time_point in sorted(equity_dict.keys()):
-            total_equity = 0
-            for contract in contracts:
-                if first_equity[contract] is None:
-                    # 合约未上市，使用初始资金
-                    total_equity += 1000000
-                elif time_point < first_equity[contract]:
-                    # 合约尚未上市，使用初始资金
-                    total_equity += 1000000
-                else:
-                    # 合约已上市，使用实际净值或最近的净值
-                    equity = equity_dict[time_point].get(contract, last_equity[contract])
-                    total_equity += equity
-            
-            equity_data.append({
-                'time': time_point,  # 直接使用格式化的时间字符串
-                'equity': total_equity
-            })
-            
-            if total_equity > max_equity:
-                max_equity = total_equity
-                max_equity_time = time_point
-            min_equity = min(min_equity, total_equity)
-            current_equity = total_equity
-        
-        # 计算统计数据
-        contract_count = len(contracts)
-        base_value = contract_count * 1000000
-        latest_time = sorted(equity_dict.keys())[-1]
-        
-        # 计算回撤天数（将字符串转为日期进行计算）
-        from datetime import datetime
-        max_equity_date = datetime.strptime(max_equity_time, '%Y-%m-%d %H:%M:%S')
-        latest_date = datetime.strptime(latest_time, '%Y-%m-%d %H:%M:%S')
-        drawdown_days = (latest_date - max_equity_date).days
-        
-        statistics = {
-            'max_equity': max_equity,
-            'min_equity': min_equity,
-            'current_equity': current_equity,
-            'current_drawdown': ((max_equity - current_equity) / base_value) * 100,
-            'max_drawdown': ((max_equity - min_equity) / base_value) * 100,
-            'max_equity_time': max_equity_time,
-            'drawdown_days': drawdown_days,
-            'y_axis_min': min_equity * 0.99,  # 留出1%的边距
-            'y_axis_max': max_equity * 1.01
-        }
-        
-        print(f"Found {len(equity_data)} data points for {len(contracts)} contracts")
-        print(f"Statistics: {statistics}")
+            if latest_data['time'] is None:
+                latest_data['time'] = time_str
+                latest_data['equities'][code] = equity
+            elif time_str == latest_data['time']:
+                latest_data['equities'][code] = equity
+            else:
+                if previous_data['time'] is None:
+                    previous_data['time'] = time_str
+                previous_data['equities'][code] = equity
         
         return jsonify({
             'status': 'success',
             'data': {
-                'equity_curve': equity_data,
-                'statistics': statistics
+                'latest_equity': latest_data,
+                'previous_equity': previous_data
             }
         })
         
     except Exception as e:
         print(f"Error getting equity data: {str(e)}")
-        import traceback
-        traceback.print_exc()
         return jsonify({'status': 'error', 'message': str(e)})
 
 @app.route('/api/portfolios', methods=['GET'])
@@ -508,7 +448,7 @@ def get_main_contracts():
         basic_data = futures_handler.db.execute_query(basic_sql, (today,))
         print(f"Found {len(basic_data)} basic contracts")
         
-        # 2. 获取这些合约的行情数据
+        # 2. 获这些合约的情数据
         contracts_data = {}
         for row in basic_data:
             ts_code = row[0]
@@ -891,7 +831,7 @@ def update_quotes():
                 is_main = is_main_contract(ts_code, last_update)
                 
                 if is_main:
-                    # 主力合约：检查最近30个交易日的数据是否完整
+                    # 主力合约：检查最���30个交易日的数据是否完整
                     check_date = (now - datetime.timedelta(days=45)).strftime('%Y%m%d')
                     start_date = check_date
                 else:
@@ -1001,7 +941,7 @@ def get_monitor_chart_data(portfolio_id):
         contracts = futures_handler.db.execute_query(contracts_sql, (portfolio_id,))
         contract_codes = [code[0].upper() for code in contracts]
         
-        print(f"Found contracts: {contract_codes}")  # 调试日志
+        print(f"Found contracts: {contract_codes}")  # 调��日志
         
         if not contract_codes:
             print("No contracts found")  # 调试日志
@@ -1016,7 +956,7 @@ def get_monitor_chart_data(portfolio_id):
         # 2. 获取最近90个交易日14:30的数据 - 修改表名为 tbpricedata
         data_sql = """
         WITH time_points AS (
-            SELECT DISTINCT DATE_FORMAT(PriceTime, '%Y-%m-%d %H:%i:%s') as PriceTime
+            SELECT DISTINCT PriceTime
             FROM tbpricedata
             WHERE TIME(PriceTime) = '14:30:00'
             AND PriceTime >= DATE_SUB(NOW(), INTERVAL 90 DAY)
@@ -1033,7 +973,7 @@ def get_monitor_chart_data(portfolio_id):
             WHERE ProductCode IN %s
         ) products
         LEFT JOIN tbpricedata t1 
-            ON DATE_FORMAT(t1.PriceTime, '%Y-%m-%d %H:%i:%s') = tp.PriceTime 
+            ON t1.PriceTime = tp.PriceTime 
             AND t1.ProductCode = products.ProductCode
         ORDER BY t1.PriceTime, t1.ProductCode
         """
@@ -1042,7 +982,7 @@ def get_monitor_chart_data(portfolio_id):
         results = futures_handler.db.execute_query(data_sql, (tuple(contract_codes),))
         print(f"Query returned {len(results)} rows")
         
-        # 3. 处理据,按时间点汇总权益
+        # 3. 处理数据,按时间点汇总权益
         chart_data = {}
         base_equity = len(contract_codes) * 1000000  # 计算基准权益
         
@@ -1050,7 +990,7 @@ def get_monitor_chart_data(portfolio_id):
             if row[0] is None:  # 跳过无效数据
                 continue
                 
-            time_str = row[0].strftime('%Y-%m-%d %H:%M:%S') if isinstance(row[0], datetime.datetime) else row[0]
+            time_str = row[0].strftime('%Y-%m-%d %H:%M:%S')
             equity = float(row[2] or 1000000)  # 如果没有数据使用初始资金
             
             if time_str not in chart_data:
@@ -1076,7 +1016,7 @@ def get_monitor_chart_data(portfolio_id):
         max_equity_index = values.index(max_equity)
         max_equity_time = times[max_equity_index]
         
-        # 计算前权益和回撤
+        # 计算当前权益和回撤
         current_equity = values[-1] if values else 0
         current_drawdown = ((max_equity - current_equity) / base_equity) * 100 if max_equity > 0 else 0
         
@@ -1348,7 +1288,7 @@ def get_portfolio_contracts_details(portfolio_id):
         
         results = futures_handler.db.execute_query(sql, (portfolio_id,))
         contracts = [{
-            'fut_code': row[0].upper()  # 只返回品种代码，转换为大写
+            'fut_code': row[0].upper()  # 只返回品种代��，转换为大写
         } for row in results]
         
         return jsonify({
@@ -1357,6 +1297,190 @@ def get_portfolio_contracts_details(portfolio_id):
         })
     except Exception as e:
         print(f"Error getting portfolio contracts: {str(e)}")
+        return jsonify({'status': 'error', 'message': str(e)})
+
+@app.route('/api/portfolio-history/<int:portfolio_id>')
+def get_portfolio_history(portfolio_id):
+    try:
+        # 获取组合包含的品种
+        contracts_sql = """
+        SELECT fut_code
+        FROM futures_portfolio_contract
+        WHERE portfolio_id = %s
+        """
+        
+        contracts = futures_handler.db.execute_query(contracts_sql, (portfolio_id,))
+        contract_codes = [code[0].upper() for code in contracts]
+        
+        if not contract_codes:
+            return jsonify({
+                'status': 'success',
+                'data': []
+            })
+        
+        # 获取最近20条权益记录
+        history_sql = """
+        SELECT 
+            t1.PriceTime,
+            t1.ProductCode,
+            t1.Equity
+        FROM tbpricedata t1
+        INNER JOIN (
+            SELECT DISTINCT PriceTime
+            FROM tbpricedata
+            WHERE ProductCode IN %s
+            AND TIME(PriceTime) = '14:30:00'
+            ORDER BY PriceTime DESC
+            LIMIT 20
+        ) t2 ON t1.PriceTime = t2.PriceTime
+        WHERE t1.ProductCode IN %s
+        ORDER BY t1.PriceTime DESC, t1.ProductCode
+        """
+        
+        results = futures_handler.db.execute_query(
+            history_sql, 
+            (tuple(contract_codes), tuple(contract_codes))
+        )
+        
+        # 处理数据
+        history_data = {}
+        for row in results:
+            time_str = row[0].strftime('%Y-%m-%d %H:%M:%S')
+            equity = float(row[2] or 0)
+            
+            if time_str not in history_data:
+                history_data[time_str] = 0
+            history_data[time_str] += equity
+        
+        # 转换为列表格式
+        history_list = [{
+            'time': time_str,
+            'total_equity': total_equity
+        } for time_str, total_equity in history_data.items()]
+        
+        return jsonify({
+            'status': 'success',
+            'data': history_list
+        })
+        
+    except Exception as e:
+        print(f"Error getting portfolio history: {str(e)}")
+        return jsonify({'status': 'error', 'message': str(e)})
+
+@app.route('/api/initial-equity-data')
+def get_initial_equity_data():
+    try:
+        # 1. 获取最新和次新的时间点
+        time_sql = """
+        SELECT DISTINCT PriceTime
+        FROM tbpricedata
+        WHERE TIME(PriceTime) = '14:30:00'
+        ORDER BY PriceTime DESC
+        LIMIT 2
+        """
+        
+        time_points = futures_handler.db.execute_query(time_sql)
+        if len(time_points) < 2:
+            return jsonify({
+                'status': 'success',
+                'data': {
+                    'latest_equity': {'time': None, 'equities': {}},
+                    'previous_equity': {'time': None, 'equities': {}}
+                }
+            })
+            
+        latest_time = time_points[0][0]
+        previous_time = time_points[1][0]
+        
+        # 2. 获取一年前的基准数据
+        base_sql = """
+        SELECT 
+            ProductCode,
+            Equity
+        FROM tbpricedata
+        WHERE PriceTime = (
+            SELECT MAX(PriceTime)
+            FROM tbpricedata
+            WHERE TIME(PriceTime) = '14:30:00'
+            AND PriceTime <= DATE_SUB(%s, INTERVAL 365 DAY)
+        )
+        AND Equity IS NOT NULL
+        """
+        
+        base_results = futures_handler.db.execute_query(base_sql, (latest_time,))
+        base_equities = {row[0]: float(row[1] or 0) for row in base_results}
+        
+        # 3. 获取最新和次新的权益数据
+        data_sql = """
+        SELECT 
+            t1.PriceTime,
+            t1.ProductCode,
+            t1.Equity
+        FROM tbpricedata t1
+        WHERE t1.PriceTime IN (%s, %s)
+        AND TIME(t1.PriceTime) = '14:30:00'
+        AND t1.Equity IS NOT NULL
+        ORDER BY t1.PriceTime DESC, t1.ProductCode
+        """
+        
+        results = futures_handler.db.execute_query(
+            data_sql, 
+            (latest_time, previous_time)
+        )
+        
+        # 4. 处理数据并进行归一化
+        latest_data = {
+            'time': latest_time.strftime('%Y-%m-%d %H:%M:%S'), 
+            'equities': {}
+        }
+        previous_data = {
+            'time': previous_time.strftime('%Y-%m-%d %H:%M:%S'), 
+            'equities': {}
+        }
+        
+        for row in results:
+            time_str = row[0].strftime('%Y-%m-%d %H:%M:%S')
+            code = row[1]
+            equity = float(row[2] or 0)
+            
+            # 如果有基准值，进行归一化处理
+            if code in base_equities:
+                normalized_equity = equity - base_equities[code] + 1000000
+            else:
+                # 新品种直接使用原始值
+                normalized_equity = equity
+            
+            if time_str == latest_data['time']:
+                latest_data['equities'][code] = normalized_equity
+            else:
+                previous_data['equities'][code] = normalized_equity
+        
+        # 5. 按权益值从大到小排序
+        latest_data['equities'] = dict(sorted(
+            latest_data['equities'].items(), 
+            key=lambda x: x[1], 
+            reverse=True
+        ))
+        previous_data['equities'] = dict(sorted(
+            previous_data['equities'].items(), 
+            key=lambda x: x[1], 
+            reverse=True
+        ))
+        
+        print(f"Found {len(latest_data['equities'])} latest records and {len(previous_data['equities'])} previous records")
+        
+        return jsonify({
+            'status': 'success',
+            'data': {
+                'latest_equity': latest_data,
+                'previous_equity': previous_data
+            }
+        })
+        
+    except Exception as e:
+        print(f"Error getting initial equity data: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'status': 'error', 'message': str(e)})
 
 if __name__ == '__main__':

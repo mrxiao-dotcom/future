@@ -201,9 +201,10 @@ async function loadMonitorPortfolios() {
                 </div>
             `).join('');
             
-            // 添加双击事件
+            // 修改双击事件为单击事件，并添加调试日志
             container.querySelectorAll('.list-group-item').forEach(item => {
-                item.addEventListener('dblclick', function() {
+                item.addEventListener('click', async function() {
+                    console.log('Portfolio clicked:', this.dataset.portfolioId);
                     const portfolioId = this.dataset.portfolioId;
                     
                     // 更新选中状态
@@ -211,8 +212,24 @@ async function loadMonitorPortfolios() {
                         i.classList.remove('active'));
                     this.classList.add('active');
                     
-                    // 加载组合详情
-                    loadPortfolioDetails(portfolioId);
+                    // 启用开始监测按钮
+                    document.getElementById('startMonitor').disabled = false;
+                    
+                    try {
+                        // 加载组合详情
+                        await loadPortfolioDetails(portfolioId);
+                        console.log('Portfolio details loaded');
+                        
+                        // 加载组合统计数据
+                        await loadPortfolioStats(portfolioId);
+                        console.log('Portfolio stats loaded');
+                        
+                        // 更新图表数据
+                        await updateMonitorChart(portfolioId);
+                        console.log('Monitor chart updated');
+                    } catch (error) {
+                        console.error('Error loading portfolio data:', error);
+                    }
                 });
             });
         }
@@ -221,11 +238,33 @@ async function loadMonitorPortfolios() {
     }
 }
 
-// 加载组合详情
+// 更新组合详情表格
+function updatePortfolioTable(details) {
+    const tbody = document.getElementById('portfolioDetails');
+    if (!tbody) {
+        console.error('Portfolio details table body not found');
+        return;
+    }
+    
+    tbody.innerHTML = details.map(contract => `
+        <tr>
+            <td>${contract.fut_code}</td>
+            <td>${getDealDirection(contract.current_equity)}</td>
+            <td>${formatNumber(contract.current_equity)}</td>
+            <td>${contract.current_price ? formatNumber(contract.current_price) : '-'}</td>
+            <td>${contract.stop_price ? formatNumber(contract.stop_price) : '-'}</td>
+            <td class="${getStopLossClass(contract.current_price, contract.stop_price)}">
+                ${calculateStopLossSpace(contract.current_price, contract.stop_price)}
+            </td>
+            <td>${contract.update_time}</td>
+        </tr>
+    `).join('');
+}
+
+// 修改 loadPortfolioDetails 函数
 async function loadPortfolioDetails(portfolioId) {
     try {
-        console.log('Loading portfolio details for ID:', portfolioId);  // 调试日志
-        
+        console.log('Loading portfolio details for ID:', portfolioId);
         const response = await fetch(`/api/monitor/portfolio-details/${portfolioId}`);
         const data = await response.json();
         
@@ -236,24 +275,40 @@ async function loadPortfolioDetails(portfolioId) {
                 document.getElementById('selectedPortfolioName').textContent = selectedPortfolio.textContent;
             }
             
-            // 更新品种详情表格
+            // 使用新的更新表格函数
             updatePortfolioTable(data.data);
-            
-            // 启用开始监测按钮
-            document.getElementById('startMonitor').disabled = false;
-            
-            // 初始化图表(如果还没初始化)
-            if (!monitorChart) {
-                console.log('Initializing chart for the first time');
-                initMonitorChart();
-            }
-            
-            // 更新图表数据
-            console.log('Updating chart data for portfolio:', portfolioId);
-            await updateMonitorChart(portfolioId);
+            console.log('Portfolio details updated');
         }
     } catch (error) {
         console.error('Error loading portfolio details:', error);
+    }
+}
+
+// 加载组合统计数据
+async function loadPortfolioStats(portfolioId) {
+    try {
+        const response = await fetch(`/api/monitor/portfolio-stats/${portfolioId}`);
+        const data = await response.json();
+        
+        if (data.status === 'success' && data.data.length > 0) {
+            const latestStats = data.data[0];  // 获取最新的统计数据
+            
+            // 更新组合数据表格
+            updateMonitorTable([{
+                time: latestStats.time,
+                current_equity: latestStats.current_equity,
+                max_equity: latestStats.max_equity,
+                max_equity_time: latestStats.max_equity_time,
+                current_drawdown: latestStats.current_drawdown,
+                drawdown_days: latestStats.drawdown_days,
+                max_drawdown: latestStats.max_drawdown,
+                contracts_count: latestStats.contracts_count,
+                long_count: latestStats.long_count,
+                short_count: latestStats.short_count
+            }]);
+        }
+    } catch (error) {
+        console.error('Error loading portfolio stats:', error);
     }
 }
 
@@ -378,6 +433,7 @@ async function updateMonitorData() {
 
 // 格式化数字
 function formatNumber(num) {
+    if (!num) return '-';
     return num.toLocaleString('zh-CN', { maximumFractionDigits: 0 });
 }
 
@@ -390,6 +446,96 @@ function formatPercent(value) {
 function formatDateTime(dateStr) {
     const date = new Date(dateStr);
     return `${date.getMonth() + 1}/${date.getDate()} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+}
+
+// 获取止损空间的样式类
+function getStopLossClass(currentPrice, stopPrice) {
+    if (!currentPrice || !stopPrice) return '';
+    const space = ((currentPrice - stopPrice) / stopPrice) * 100;
+    return space > 0 ? 'text-success' : 'text-danger';
+}
+
+// 计算止损空间
+function calculateStopLossSpace(currentPrice, stopPrice) {
+    if (!currentPrice || !stopPrice) return '-';
+    const space = ((currentPrice - stopPrice) / stopPrice) * 100;
+    return space.toFixed(2) + '%';
+}
+
+// 更新监控表格
+function updateMonitorTable(data) {
+    const tbody = document.getElementById('monitorTableBody');
+    if (!tbody) {
+        console.error('Monitor table body not found');
+        return;
+    }
+
+    const rows = tbody.getElementsByTagName('tr');
+    
+    // 当前权益
+    if (rows[0]) {
+        const cells = rows[0].getElementsByTagName('td');
+        if (cells[1]) cells[1].textContent = formatNumber(data[0].current_equity);
+    }
+    
+    // 过去一年最高权益
+    if (rows[1]) {
+        const cells = rows[1].getElementsByTagName('td');
+        if (cells[1]) cells[1].textContent = formatNumber(data[0].max_equity);
+    }
+    
+    // 发生时间
+    if (rows[2]) {
+        const cells = rows[2].getElementsByTagName('td');
+        if (cells[1]) cells[1].textContent = formatDateTime(data[0].max_equity_time);
+    }
+    
+    // 当前回撤
+    if (rows[3]) {
+        const cells = rows[3].getElementsByTagName('td');
+        if (cells[1]) cells[1].textContent = formatPercent(data[0].current_drawdown);
+    }
+    
+    // 回撤时间
+    if (rows[4]) {
+        const cells = rows[4].getElementsByTagName('td');
+        if (cells[1]) {
+            cells[1].textContent = `${data[0].drawdown_days}天`;
+            if (data[0].drawdown_days > 90) {
+                cells[1].classList.add('text-danger');
+            } else {
+                cells[1].classList.remove('text-danger');
+            }
+        }
+    }
+    
+    // 过去一年最大回撤
+    if (rows[5]) {
+        const cells = rows[5].getElementsByTagName('td');
+        if (cells[1]) cells[1].textContent = formatPercent(data[0].max_drawdown);
+    }
+    
+    // 品种总数
+    if (rows[6]) {
+        const cells = rows[6].getElementsByTagName('td');
+        if (cells[1]) cells[1].textContent = data[0].contracts_count;
+    }
+    
+    // 品种多空
+    if (rows[7]) {
+        const cells = rows[7].getElementsByTagName('td');
+        if (cells[1]) cells[1].textContent = `多:${data[0].long_count} 空:${data[0].short_count}`;
+    }
+    
+    // 净多空
+    if (rows[8]) {
+        const cells = rows[8].getElementsByTagName('td');
+        if (cells[1]) {
+            const netPosition = data[0].long_count - data[0].short_count;
+            cells[1].textContent = netPosition;
+            cells[1].className = netPosition > 0 ? 'text-success' : netPosition < 0 ? 'text-danger' : '';
+        }
+    }
 }
 
 // 初始化监控功能

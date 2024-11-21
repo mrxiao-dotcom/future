@@ -130,59 +130,63 @@
                     </div>
                 </div>
 
-                <!-- 下部分净值曲线 -->
+                <!-- 下部分权益数据 -->
                 <div class="row">
-                    <div class="col-9">
+                    <div class="col-12">
                         <div class="card">
                             <div class="card-header bg-light">
-                                <h6 class="mb-0">净值曲线</h6>
+                                <h6 class="mb-0">权益数据</h6>
                             </div>
                             <div class="card-body">
-                                <div class="equity-chart" 
-                                     style="height: calc(100vh - 600px); min-height: 400px;">
+                                <div class="row">
+                                    <!-- 最新权益数据表格 -->
+                                    <div class="col-4">
+                                        <div class="table-responsive">
+                                            <table class="table table-sm table-hover">
+                                                <thead>
+                                                    <tr>
+                                                        <th>品种代码</th>
+                                                        <th class="sortable" data-sort="equity">权益 (<span id="latestTime">-</span>)</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody id="latestEquityTable">
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+
+                                    <!-- 上一时间权益数据表格 -->
+                                    <div class="col-4">
+                                        <div class="table-responsive">
+                                            <table class="table table-sm table-hover">
+                                                <thead>
+                                                    <tr>
+                                                        <th>品种代码</th>
+                                                        <th class="sortable" data-sort="equity">权益 (<span id="previousTime">-</span>)</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody id="previousEquityTable">
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+
+                                    <!-- 组合历史权益数据表格 -->
+                                    <div class="col-4">
+                                        <div class="table-responsive">
+                                            <table class="table table-sm table-hover">
+                                                <thead>
+                                                    <tr>
+                                                        <th>时间</th>
+                                                        <th>组合权益</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody id="portfolioHistoryTable">
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
                                 </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-3">
-                        <div class="card">
-                            <div class="card-header bg-light">
-                                <h6 class="mb-0">统计数据</h6>
-                            </div>
-                            <div class="card-body">
-                                <!-- 统计数据表格 -->
-                                <table class="table table-sm">
-                                    <tbody>
-                                        <tr>
-                                            <th>最高权益</th>
-                                            <td id="maxEquity">-</td>
-                                        </tr>
-                                        <tr>
-                                            <th>最高权益时间</th>
-                                            <td id="maxEquityTime">-</td>
-                                        </tr>
-                                        <tr>
-                                            <th>回撤天数</th>
-                                            <td id="drawdownDays">-</td>
-                                        </tr>
-                                        <tr>
-                                            <th>最低权益</th>
-                                            <td id="minEquity">-</td>
-                                        </tr>
-                                        <tr>
-                                            <th>当前权益</th>
-                                            <td id="currentEquity">-</td>
-                                        </tr>
-                                        <tr>
-                                            <th>当前回撤</th>
-                                            <td id="currentDrawdown">-</td>
-                                        </tr>
-                                        <tr>
-                                            <th>最撤</th>
-                                            <td id="maxDrawdown">-</td>
-                                        </tr>
-                                    </tbody>
-                                </table>
                             </div>
                         </div>
                     </div>
@@ -414,10 +418,11 @@
 
                 <!-- 下部分：动态表格（60%） -->
                 <div class="row" style="height: 58vh;">
-                    <div class="col-12">
+                    <!-- 左侧：组合数据列表 -->
+                    <div class="col-6">
                         <div class="card h-100">
                             <div class="card-header bg-light">
-                                <h6 class="mb-0">实时监测数据</h6>
+                                <h6 class="mb-0">组合数据</h6>
                             </div>
                             <div class="card-body p-0">
                                 <div class="table-responsive" style="height: calc(100% - 40px);">
@@ -437,6 +442,34 @@
                                             <tr><td>品种总数</td><td></td></tr>
                                             <tr><td>品种多空</td><td></td></tr>
                                             <tr><td>净多空</td><td></td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 右侧：成分合约数据列表 -->
+                    <div class="col-6">
+                        <div class="card h-100">
+                            <div class="card-header bg-light">
+                                <h6 class="mb-0">成分合约数据</h6>
+                            </div>
+                            <div class="card-body p-0">
+                                <div class="table-responsive" style="height: calc(100% - 40px);">
+                                    <table class="table table-sm table-hover table-bordered mb-0">
+                                        <thead>
+                                            <tr>
+                                                <th>品种代码</th>
+                                                <th>多空方向</th>
+                                                <th>最新权益</th>
+                                                <th>最新价</th>
+                                                <th>止损价</th>
+                                                <th>止损空间</th>
+                                                <th>更新时间</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="portfolioDetails">
                                         </tbody>
                                     </table>
                                 </div>
