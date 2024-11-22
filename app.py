@@ -9,6 +9,12 @@ import pandas as pd
 
 app = Flask(__name__)
 
+# 添加全局变量来跟踪进度
+equity_progress = {
+    'progress': 0,
+    'status': 'idle'
+}
+
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -226,7 +232,7 @@ def get_portfolio_contracts(portfolio_id):
 @app.route('/api/portfolios/<int:portfolio_id>', methods=['DELETE'])
 def delete_portfolio(portfolio_id):
     try:
-        # 由于设置了外键级联删除，只需要删除组合即可
+        # 由于设置了外键级删除，只需要删除组合即可
         sql = "DELETE FROM futures_portfolio WHERE id = %s"
         futures_handler.db.execute_update(sql, (portfolio_id,))
         
@@ -236,7 +242,7 @@ def delete_portfolio(portfolio_id):
 
 @app.route('/api/monitor/portfolio-details/<int:portfolio_id>')
 def get_portfolio_details(portfolio_id):
-    """获取组合详细信息，包括每个品种的多空方向和最新权益"""
+    """获取组合详信息，包括每个品种的多空方向和最新权益"""
     try:
         sql = """
         SELECT 
@@ -438,7 +444,7 @@ def get_main_contracts():
         print(f"Latest trade date: {latest_date}")
         
         # 简化 SQL 查询，分两步取数据
-        # 1. 先获取所有合约基本信息
+        # 1. 先获取所有合约本信息
         basic_sql = """
         SELECT ts_code, name, exchange, fut_code
         FROM futures_basic
@@ -452,7 +458,7 @@ def get_main_contracts():
         contracts_data = {}
         for row in basic_data:
             ts_code = row[0]
-            # 掉连续合约和特殊合约
+            # 掉连续合约特殊合约
             if 'L.' in ts_code or '99.' in ts_code:
                 continue
                 
@@ -492,7 +498,7 @@ def get_main_contracts():
             WHERE ts_code = %s AND trade_date = %s
             """
             
-            # 获取周数据（5个交易日）
+            # 获取周数（5个交易日）
             week_sql = """
             SELECT 
                 SUM(amount) as total_amount,
@@ -541,7 +547,7 @@ def get_main_contracts():
                 week_max_price = float(week[1] or 0)
                 week_amplitude = ((week_max_price - week_min_price) / week_min_price * 100) if week_min_price > 0 else 0
                 
-                # 计算月振幅（22日最高最低价之差/最低价）
+                # 计算月振幅（22日高最低价之差/最低价）
                 month_min_price = float(month[2] or 0)
                 month_max_price = float(month[1] or 0)
                 month_amplitude = ((month_max_price - month_min_price) / month_min_price * 100) if month_min_price > 0 else 0
@@ -670,7 +676,7 @@ def get_contract_details(ts_code):
                     'oi': float(row[4] or 0)
                 })
         
-        # 按合约代码排序
+        # 按合约码排序
         related_contracts.sort(key=lambda x: x['ts_code'])
         
         return jsonify({
@@ -727,7 +733,7 @@ def is_main_contract(ts_code, latest_date):
 
 # 添加交易日判断函数
 def is_trading_day(date_str):
-    # 转换为datetime对象
+    # 转为datetime对象
     date = datetime.datetime.strptime(date_str, '%Y%m%d')
     
     # 周末不是交易日
@@ -740,7 +746,7 @@ def is_trading_day(date_str):
 def get_latest_trading_day():
     now = datetime.datetime.now()
     
-    # 如果当前时间早于15:30，使用前一个交易日
+    # 如果当前时间早于15:30，使前一个交易日
     if now.hour < 15 or (now.hour == 15 and now.minute < 30):
         check_date = now - datetime.timedelta(days=1)
     else:
@@ -831,17 +837,17 @@ def update_quotes():
                 is_main = is_main_contract(ts_code, last_update)
                 
                 if is_main:
-                    # 主力合约：检查最���30个交易日的数据是否完整
+                    # 主力合约：检查最30个交易日的数据是否完整
                     check_date = (now - datetime.timedelta(days=45)).strftime('%Y%m%d')
                     start_date = check_date
                 else:
-                    # 非主力合约：只获取缺失的最新数据
+                    # 非主力合约只获取缺失的最新数据
                     start_date = (last_update + datetime.timedelta(days=1)).strftime('%Y%m%d') if last_update else latest_available_date
                 
                 end_date = latest_available_date
-                print(f"获取{ts_code}的数据: {start_date} 到 {end_date}" + ("（主力合约）" if is_main else ""))
+                print(f"取{ts_code}的数据: {start_date} 到 {end_date}" + ("（主力合约）" if is_main else ""))
                 
-                # 有在需要更新数据时才调用API
+                # 有在需要更新据时才调用API
                 if start_date <= end_date:
                     df = futures_handler._call_tushare_api(
                         futures_handler.pro.fut_daily,
@@ -941,7 +947,7 @@ def get_monitor_chart_data(portfolio_id):
         contracts = futures_handler.db.execute_query(contracts_sql, (portfolio_id,))
         contract_codes = [code[0].upper() for code in contracts]
         
-        print(f"Found contracts: {contract_codes}")  # 调��日志
+        print(f"Found contracts: {contract_codes}")  # 日志
         
         if not contract_codes:
             print("No contracts found")  # 调试日志
@@ -1033,7 +1039,7 @@ def get_monitor_chart_data(portfolio_id):
             current_time = datetime.datetime.strptime(times[-1], '%Y-%m-%d %H:%M:%S')
             drawdown_days = (current_time - max_time).days
         
-        # 5. 转换为图表所需格式
+        # 5. 转换为图表需格式
         data = {
             'chart_data': [{
                 'time': time_str,
@@ -1074,10 +1080,10 @@ def get_component_curves():
         if not components:
             return jsonify({
                 'status': 'error',
-                'message': '未选择品种'
+                'message': '未选品种'
             })
             
-        # 修改查询范围为365天
+        # 修改询范围为365天
         curves_sql = """
         SELECT 
             PriceTime,
@@ -1094,7 +1100,7 @@ def get_component_curves():
         
         # 处理数据
         times = []
-        curves = {component.upper(): [] for component in components}  # 使用大写作为键
+        curves = {component.upper(): [] for component in components}  # 用写作为键
         statistics = {component.upper(): {  # 使用大写作为键
             'current_equity': 0,
             'max_equity': 0,
@@ -1252,10 +1258,10 @@ def get_portfolio_curves():
                 'drawdown_days': drawdown_days
             }
         
-        # 整理时间序列
+        # 整理时间列
         sorted_times = sorted(all_times)
         
-        # 整理曲线数据
+        # 理曲线数据
         curves = {
             name: [curve.get(t, None) for t in sorted_times]
             for name, curve in curves_data.items()
@@ -1288,7 +1294,7 @@ def get_portfolio_contracts_details(portfolio_id):
         
         results = futures_handler.db.execute_query(sql, (portfolio_id,))
         contracts = [{
-            'fut_code': row[0].upper()  # 只返回品种代��，转换为大写
+            'fut_code': row[0].upper()  # 只返回品种代，转换为大写
         } for row in results]
         
         return jsonify({
@@ -1367,113 +1373,237 @@ def get_portfolio_history(portfolio_id):
         print(f"Error getting portfolio history: {str(e)}")
         return jsonify({'status': 'error', 'message': str(e)})
 
+@app.route('/api/equity-progress')
+def get_equity_progress():
+    return jsonify({
+        'status': 'success',
+        'progress': equity_progress['progress']
+    })
+
 @app.route('/api/initial-equity-data')
 def get_initial_equity_data():
     try:
-        # 1. 获取最新和次新的时间点
+        # 获取筛选参数
+        filter_contracts = request.args.get('contracts', '').split(',')
+        filter_contracts = [c.strip().upper() for c in filter_contracts if c.strip()]
+        
+        print("开始获取权益数据...")
+        
+        # 1. 获取ag的时间序列作为基准
         time_sql = """
         SELECT DISTINCT PriceTime
         FROM tbpricedata
-        WHERE TIME(PriceTime) = '14:30:00'
+        WHERE PriceTime >= DATE_SUB(CURDATE(), INTERVAL 3 DAY)
+        AND ProductCode = 'ag'
         ORDER BY PriceTime DESC
-        LIMIT 2
         """
         
-        time_points = futures_handler.db.execute_query(time_sql)
-        if len(time_points) < 2:
-            return jsonify({
-                'status': 'success',
-                'data': {
-                    'latest_equity': {'time': None, 'equities': {}},
-                    'previous_equity': {'time': None, 'equities': {}}
-                }
-            })
-            
-        latest_time = time_points[0][0]
-        previous_time = time_points[1][0]
+        print("获取时间序列...")
+        time_results = futures_handler.db.execute_query(time_sql)
+        time_list = [row[0] for row in time_results]
+        print(f"找到 {len(time_list)} 个时间点")
         
-        # 2. 获取一年前的基准数据
-        base_sql = """
-        SELECT 
-            ProductCode,
-            Equity
-        FROM tbpricedata
-        WHERE PriceTime = (
-            SELECT MAX(PriceTime)
-            FROM tbpricedata
-            WHERE TIME(PriceTime) = '14:30:00'
-            AND PriceTime <= DATE_SUB(%s, INTERVAL 365 DAY)
-        )
-        AND Equity IS NOT NULL
-        """
-        
-        base_results = futures_handler.db.execute_query(base_sql, (latest_time,))
-        base_equities = {row[0]: float(row[1] or 0) for row in base_results}
-        
-        # 3. 获取最新和次新的权益数据
+        # 2. 获取所有品种的权益数据
         data_sql = """
         SELECT 
             t1.PriceTime,
             t1.ProductCode,
             t1.Equity
         FROM tbpricedata t1
-        WHERE t1.PriceTime IN (%s, %s)
-        AND TIME(t1.PriceTime) = '14:30:00'
+        WHERE t1.PriceTime >= DATE_SUB(CURDATE(), INTERVAL 3 DAY)
+        {}
+        AND t1.Equity IS NOT NULL
+        ORDER BY t1.ProductCode, t1.PriceTime DESC
+        """
+        
+        # 如果有筛选条件，添加筛选条件，否则不添加任何条件
+        if filter_contracts:
+            data_sql = data_sql.format("AND t1.ProductCode IN %s")
+            query_params = (tuple(filter_contracts),)
+        else:
+            data_sql = data_sql.format("")
+            query_params = ()
+        
+        print("获取权益数据...")
+        results = futures_handler.db.execute_query(data_sql, query_params)
+        print(f"获取到 {len(results)} 条数据")
+        
+        # 3. 按品种组织数据
+        product_data = {}
+        all_products = set()
+        
+        for row in results:
+            time = row[0]
+            code = row[1]
+            equity = float(row[2] or 0)
+            
+            if code not in product_data:
+                product_data[code] = []
+            
+            product_data[code].append({
+                'time': time,
+                'equity': equity
+            })
+            all_products.add(code)
+        
+        # 4. 计算半小时净盈亏数据
+        latest_data = {
+            'times': [],
+            'equities': {}
+        }
+        
+        # 获取最近10个时间点
+        recent_times = [t.strftime('%m/%d %H:%M') for t in time_list[:10]]
+        latest_data['times'] = recent_times
+        
+        # 计算每个品种的净盈亏
+        for code in all_products:
+            latest_data['equities'][code] = {}
+            data_points = product_data.get(code, [])
+            
+            if not data_points:
+                print(f"警告：品种 {code} 没有数据")
+                # 如果品种没有数据，所有时间点的盈亏都设为0
+                for time_str in recent_times:
+                    latest_data['equities'][code][time_str] = 0
+                continue
+            
+            # 遍历ag的时间序列
+            for i, time_str in enumerate(recent_times):
+                current_equity = None
+                next_equity = None
+                
+                # 在品种的数据点中找到当前时间点和下一个时间点的权益
+                for j, point in enumerate(data_points):
+                    point_time = point['time'].strftime('%m/%d %H:%M')
+                    if point_time == time_str:
+                        current_equity = point['equity']
+                        # 找到下一个时间点的权益（在排序后的列表中的下一个）
+                        if j + 1 < len(data_points):
+                            next_equity = data_points[j + 1]['equity']
+                        break
+                
+                # 计算盈亏
+                if current_equity is not None and next_equity is not None:
+                    profit = current_equity - next_equity
+                else:
+                    profit = 0
+                
+                latest_data['equities'][code][time_str] = profit
+
+        print("半小时净盈亏数据处理完成")
+        
+        # 4. 获取最近5个交易日14:30的数据和一年前的基准数据
+        history_sql = """
+        WITH base_time AS (
+            SELECT MAX(PriceTime) as base_time
+            FROM tbpricedata
+            WHERE TIME(PriceTime) = '14:30:00'
+            AND DATE(PriceTime) = DATE_SUB(CURDATE(), INTERVAL 365 DAY)
+        )
+        SELECT 
+            t1.PriceTime,
+            t1.ProductCode,
+            t1.Equity as current_equity,
+            t2.Equity as base_equity
+        FROM tbpricedata t1
+        LEFT JOIN (
+            SELECT ProductCode, Equity
+            FROM tbpricedata
+            WHERE PriceTime = (SELECT base_time FROM base_time)
+        ) t2 ON t1.ProductCode = t2.ProductCode
+        WHERE TIME(t1.PriceTime) = '14:30:00'
+        AND t1.PriceTime >= DATE_SUB(NOW(), INTERVAL 5 DAY)
         AND t1.Equity IS NOT NULL
         ORDER BY t1.PriceTime DESC, t1.ProductCode
         """
         
-        results = futures_handler.db.execute_query(
-            data_sql, 
-            (latest_time, previous_time)
-        )
+        print("获取历史数据...")
+        history_results = futures_handler.db.execute_query(history_sql)
+        print(f"获取到 {len(history_results)} 条历史数据")
         
-        # 4. 处理数据并进行归一化
-        latest_data = {
-            'time': latest_time.strftime('%Y-%m-%d %H:%M:%S'), 
-            'equities': {}
-        }
-        previous_data = {
-            'time': previous_time.strftime('%Y-%m-%d %H:%M:%S'), 
+        # 5. 计算相对权益数据
+        history_data = {
+            'dates': [],
             'equities': {}
         }
         
-        for row in results:
-            time_str = row[0].strftime('%Y-%m-%d %H:%M:%S')
+        # 按时间组织历史数据
+        history_times = {}
+        for row in history_results:
+            time = row[0]
             code = row[1]
-            equity = float(row[2] or 0)
+            current_equity = float(row[2] or 0)
+            base_equity = float(row[3] or 0)
             
-            # 如果有基准值，进行归一化处理
-            if code in base_equities:
-                normalized_equity = equity - base_equities[code] + 1000000
-            else:
-                # 新品种直接使用原始值
-                normalized_equity = equity
+            time_str = time.strftime('%m/%d %H:%M')
+            if time_str not in history_times:
+                history_times[time_str] = {}
+                history_data['dates'].append(time_str)
             
-            if time_str == latest_data['time']:
-                latest_data['equities'][code] = normalized_equity
-            else:
-                previous_data['equities'][code] = normalized_equity
+            # 计算相对权益
+            normalized_equity = current_equity - base_equity + 1000000
+            history_times[time_str][code] = normalized_equity
         
-        # 5. 按权益值从大到小排序
-        latest_data['equities'] = dict(sorted(
-            latest_data['equities'].items(), 
-            key=lambda x: x[1], 
-            reverse=True
-        ))
-        previous_data['equities'] = dict(sorted(
-            previous_data['equities'].items(), 
-            key=lambda x: x[1], 
-            reverse=True
-        ))
+        # 只保留最近5个交易日的数据
+        history_data['dates'] = history_data['dates'][:5]
         
-        print(f"Found {len(latest_data['equities'])} latest records and {len(previous_data['equities'])} previous records")
+        # 整理每个品种的数据
+        for code in all_products:
+            history_data['equities'][code] = {}
+            for time_str in history_data['dates']:
+                if time_str in history_times and code in history_times[time_str]:
+                    history_data['equities'][code][time_str] = history_times[time_str][code]
+        
+        print("数据处理完成")
+        
+        # 获取品种的多空方向
+        position_sql = """
+        SELECT 
+            t1.ProductCode,
+            t1.Position,  -- 直接使用数据库中的Position字段
+            t1.PriceTime
+        FROM tbpricedata t1
+        INNER JOIN (
+            SELECT 
+                ProductCode,
+                MAX(PriceTime) as latest_time
+            FROM tbpricedata
+            GROUP BY ProductCode
+        ) t2 ON t1.ProductCode = t2.ProductCode 
+        AND t1.PriceTime = t2.latest_time
+        ORDER BY t1.ProductCode
+        """
+        position_results = futures_handler.db.execute_query(position_sql)
+        positions = {}
+        
+        # 调试输出
+        print("多空方向数据：")
+        for row in position_results:
+            code = row[0]
+            position = row[1]
+            price_time = row[2]
+            positions[code] = position or 0  # 如果position为None，使用0
+            print(f"品种: {code}, 方向: {position}, 时间: {price_time}")
+
+        # 在计算半小时净盈亏数据时添加position信息
+        for code in latest_data['equities']:
+            profits = latest_data['equities'][code]
+            latest_data['equities'][code] = {
+                'position': positions.get(code, 0),  # 如果没有方向数据，默认为0（空仓）
+                'profits': {
+                    time_str: (0 if profit == 0 else profit)  # 确保0值保持为0，不会被转换为None
+                    for time_str, profit in profits.items()
+                }
+            }
+        
+        print("数据处理完成")
         
         return jsonify({
             'status': 'success',
             'data': {
                 'latest_equity': latest_data,
-                'previous_equity': previous_data
+                'previous_equity': history_data
             }
         })
         

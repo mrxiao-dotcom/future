@@ -86,11 +86,11 @@
                             </div>
                             <div class="card-body p-0">
                                 <div class="list-group list-group-flush selected-contracts" 
-                                     style="height: 400px; overflow-y: auto;">
+                                     style="height: 360px; overflow-y: auto;">
                                 </div>
-                                <div class="p-3 border-top">
-                                    <button class="btn btn-success w-100 generate-equity">
-                                        生成净值曲线
+                                <div class="p-2">
+                                    <button class="btn btn-sm btn-primary w-100 filter-equity">
+                                        <i class="bi bi-funnel"></i> 筛选权益数据
                                     </button>
                                 </div>
                             </div>
@@ -134,19 +134,38 @@
                 <div class="row">
                     <div class="col-12">
                         <div class="card">
-                            <div class="card-header bg-light">
+                            <div class="card-header bg-light d-flex justify-content-between align-items-center">
                                 <h6 class="mb-0">权益数据</h6>
+                                <div class="progress" style="width: 200px; height: 4px; display: none;" id="equityProgress">
+                                    <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                                         role="progressbar" 
+                                         style="width: 0%"
+                                         aria-valuenow="0" 
+                                         aria-valuemin="0" 
+                                         aria-valuemax="100">
+                                    </div>
+                                </div>
                             </div>
                             <div class="card-body">
                                 <div class="row">
-                                    <!-- 最新权益数据表格 -->
-                                    <div class="col-4">
+                                    <!-- 最近10个半小时的净盈亏 -->
+                                    <div class="col-7">
                                         <div class="table-responsive">
                                             <table class="table table-sm table-hover">
                                                 <thead>
                                                     <tr>
                                                         <th>品种代码</th>
-                                                        <th class="sortable" data-sort="equity">权益 (<span id="latestTime">-</span>)</th>
+                                                        <th>方向</th>
+                                                        <th class="text-end" id="time-0">-</th>
+                                                        <th class="text-end" id="time-1">-</th>
+                                                        <th class="text-end" id="time-2">-</th>
+                                                        <th class="text-end" id="time-3">-</th>
+                                                        <th class="text-end" id="time-4">-</th>
+                                                        <th class="text-end" id="time-5">-</th>
+                                                        <th class="text-end" id="time-6">-</th>
+                                                        <th class="text-end" id="time-7">-</th>
+                                                        <th class="text-end" id="time-8">-</th>
+                                                        <th class="text-end" id="time-9">-</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody id="latestEquityTable">
@@ -155,33 +174,21 @@
                                         </div>
                                     </div>
 
-                                    <!-- 上一时间权益数据表格 -->
-                                    <div class="col-4">
+                                    <!-- 最近5个交易日14:30的相对权益 -->
+                                    <div class="col-5">
                                         <div class="table-responsive">
                                             <table class="table table-sm table-hover">
                                                 <thead>
                                                     <tr>
                                                         <th>品种代码</th>
-                                                        <th class="sortable" data-sort="equity">权益 (<span id="previousTime">-</span>)</th>
+                                                        <th class="text-end" id="date-0">-</th>
+                                                        <th class="text-end" id="date-1">-</th>
+                                                        <th class="text-end" id="date-2">-</th>
+                                                        <th class="text-end" id="date-3">-</th>
+                                                        <th class="text-end" id="date-4">-</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody id="previousEquityTable">
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    </div>
-
-                                    <!-- 组合历史权益数据表格 -->
-                                    <div class="col-4">
-                                        <div class="table-responsive">
-                                            <table class="table table-sm table-hover">
-                                                <thead>
-                                                    <tr>
-                                                        <th>时间</th>
-                                                        <th>组合权益</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody id="portfolioHistoryTable">
                                                 </tbody>
                                             </table>
                                         </div>
@@ -318,7 +325,7 @@
                                             <th>合约</th>
                                             <th>最新价</th>
                                             <th>成交额(亿)</th>
-                                            <th>持仓</th>
+                                            <th>仓</th>
                                         </tr>
                                     </thead>
                                     <tbody id="relatedContractsList">
@@ -503,7 +510,7 @@
                                 </div>
                                 <!-- 成分列表标题 -->
                                 <div class="card-header bg-light mt-2">
-                                    <h6 class="mb-0">成分列表</h6>
+                                    <h6 class="mb-0">成分列���</h6>
                                 </div>
                                 <!-- 成分列表容器 - 修改高度为75% -->
                                 <div class="list-group list-group-flush component-track-list" 
