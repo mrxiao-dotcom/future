@@ -537,8 +537,11 @@ function formatNumber(num) {
     // 如果是 undefined, null 或者 NaN，直接返回 "0"
     if (num === undefined || num === null || isNaN(num)) return "0";
     
-    // 四舍五入到整数
-    return Math.round(num).toLocaleString('zh-CN');
+    // 四舍五入到整数，并添加千位分隔符
+    return Math.round(num).toLocaleString('zh-CN', {
+        maximumFractionDigits: 0,  // 不显示小数位
+        minimumFractionDigits: 0   // 不显示小数位
+    });
 }
 
 // 初始化机会筛选模块
@@ -742,10 +745,13 @@ function clearSelectedContracts() {
 function updateLatestEquityTable(data) {
     if (!data || !data.times || !data.equities) return;
     
-    // 更新表头时间
+    // 新表头时间
     data.times.forEach((time, index) => {
         const th = document.getElementById(`time-${index}`);
-        if (th) th.textContent = time;
+        if (th) {
+            th.textContent = time;
+            th.classList.add('text-center');  // 添加居中样式
+        }
     });
     
     // 转换为数组并按最新时间点的盈亏排序
@@ -753,7 +759,7 @@ function updateLatestEquityTable(data) {
     const sortedData = Object.entries(data.equities)
         .map(([code, info]) => ({
             code,
-            position: info.position || 0,  // 添加position字段
+            position: info.position || 0,
             profits: data.times.map(time => {
                 const value = info.profits ? info.profits[time] : 0;
                 return typeof value === 'number' ? value : 0;
@@ -765,7 +771,6 @@ function updateLatestEquityTable(data) {
     tbody.innerHTML = sortedData.map((item, index) => {
         const bgClass = index < 30 && index % 5 === 0 ? 'bg-info bg-opacity-10' : '';
         
-        // 添加方向显示
         const positionText = item.position === 1 ? '多' : 
                            item.position === -1 ? '空' : '-';
         const positionClass = item.position === 1 ? 'text-success' : 
@@ -773,39 +778,32 @@ function updateLatestEquityTable(data) {
         
         return `
             <tr class="${bgClass}">
-                <td>${item.code}</td>
-                <td class="${positionClass}">${positionText}</td>
+                <td class="text-center">${item.code}</td>
+                <td class="text-center ${positionClass}">${positionText}</td>
                 ${item.profits.map(profit => {
                     const profitClass = profit > 0 ? 'text-success' : profit < 0 ? 'text-danger' : '';
-                    return `<td class="text-end ${profitClass}">${formatNumber(profit)}</td>`;
+                    return `<td class="text-center ${profitClass}">${formatNumber(profit)}</td>`;
                 }).join('')}
             </tr>
         `;
     }).join('');
 }
 
-// 更新历史权益数据表格（显示最近5个交易日14:30的相对权益）
+// 更新历史权益数据表格
 function updatePreviousEquityTable(data) {
-    if (!data || !data.dates || !data.equities) return;
+    if (!data || !data.equities) return;
     
-    // 更新表头日期
-    data.dates.forEach((date, index) => {
-        const th = document.getElementById(`date-${index}`);
-        if (th) th.textContent = date;
-    });
-    
-    // 转换为数组并按最新日期的权益排序
-    const latestDate = data.dates[0];
+    // 转换为数组并按7日增长排序
     const sortedData = Object.entries(data.equities)
-        .map(([code, equities]) => ({
+        .map(([code, growth]) => ({
             code,
-            equities: data.dates.map(date => {
-                const value = equities[date];
-                // 确保返回数字，包括0
-                return typeof value === 'number' ? value : 0;
-            })
+            day_7: growth.day_7,
+            day_30: growth.day_30,
+            day_90: growth.day_90,
+            day_180: growth.day_180,
+            day_365: growth.day_365
         }))
-        .sort((a, b) => (b.equities[0] || 0) - (a.equities[0] || 0));
+        .sort((a, b) => (b.day_7 || 0) - (a.day_7 || 0));
     
     const tbody = document.getElementById('previousEquityTable');
     tbody.innerHTML = sortedData.map((item, index) => {
@@ -813,13 +811,48 @@ function updatePreviousEquityTable(data) {
         
         return `
             <tr class="${bgClass}">
-                <td>${item.code}</td>
-                ${item.equities.map(equity => 
-                    `<td class="text-end">${formatNumber(equity)}</td>`
-                ).join('')}
+                <td class="text-center">${item.code}</td>
+                <td class="text-center ${getGrowthClass(item.day_7)}">${formatNumber(item.day_7)}</td>
+                <td class="text-center ${getGrowthClass(item.day_30)}">${formatNumber(item.day_30)}</td>
+                <td class="text-center ${getGrowthClass(item.day_90)}">${formatNumber(item.day_90)}</td>
+                <td class="text-center ${getGrowthClass(item.day_180)}">${formatNumber(item.day_180)}</td>
+                <td class="text-center ${getGrowthClass(item.day_365)}">${formatNumber(item.day_365)}</td>
             </tr>
         `;
     }).join('');
+    
+    // 添加排序功能
+    document.querySelectorAll('.sortable[data-period]').forEach(header => {
+        header.addEventListener('click', function() {
+            const period = this.dataset.period;
+            const periodKey = `day_${period}`;
+            
+            // 重新排序数据
+            sortedData.sort((a, b) => (b[periodKey] || 0) - (a[periodKey] || 0));
+            
+            // 更新表格
+            tbody.innerHTML = sortedData.map((item, index) => {
+                const bgClass = index < 30 && index % 5 === 0 ? 'bg-info bg-opacity-10' : '';
+                
+                return `
+                    <tr class="${bgClass}">
+                        <td class="text-center">${item.code}</td>
+                        <td class="text-center ${getGrowthClass(item.day_7)}">${formatNumber(item.day_7)}</td>
+                        <td class="text-center ${getGrowthClass(item.day_30)}">${formatNumber(item.day_30)}</td>
+                        <td class="text-center ${getGrowthClass(item.day_90)}">${formatNumber(item.day_90)}</td>
+                        <td class="text-center ${getGrowthClass(item.day_180)}">${formatNumber(item.day_180)}</td>
+                        <td class="text-center ${getGrowthClass(item.day_365)}">${formatNumber(item.day_365)}</td>
+                    </tr>
+                `;
+            }).join('');
+        });
+    });
+}
+
+// 获取增长值的样式类
+function getGrowthClass(value) {
+    if (!value) return '';
+    return value > 0 ? 'text-success' : value < 0 ? 'text-danger' : '';
 }
 
 // 修改排序功能以保持背景色
@@ -1026,7 +1059,7 @@ async function savePortfolio() {
         if (data.status === 'success') {
             alert(data.message);  // 显示成功消息
             document.getElementById('portfolioName').value = '';  // 组合名称
-            document.getElementById('manualContracts').value = '';  // 清空手动输入
+            document.getElementById('manualContracts').value = '';  // 清空手动输
             loadPortfolios();  // 重新加载组合列表
         } else {
             alert(data.message || '保存失败');
@@ -1090,7 +1123,7 @@ async function deletePortfolio(portfolioId, portfolioName) {
         
         const data = await response.json();
         if (data.status === 'success') {
-            alert('组合删除成��');
+            alert('组合删除成');
             loadPortfolios();
         } else {
             alert(data.message || '删除失败');

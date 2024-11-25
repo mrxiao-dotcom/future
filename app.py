@@ -694,8 +694,8 @@ def get_contract_details(ts_code):
 # 在 app.py 中添加一个函数来判断是否是主力合约
 def is_main_contract(ts_code, latest_date):
     try:
-        # 获取该品种所有合约的成交额持仓量
-        base_code = ts_code.split('.')[0][:-4]  # 提取品种代码
+        # 获取该品种所有合约的成交额仓量
+        base_code = ts_code.split('.')[0][:-4]  # 提取品种代
         exchange = ts_code.split('.')[1]
         
         sql = """
@@ -892,8 +892,8 @@ def update_quotes():
                         
                         futures_handler.db.execute_many(insert_sql, params)
                         futures_handler.update_status['logs'].append(
-                            f"更新{ts_code}数据{len(params)}条" + 
-                            ("（主力合约）" if is_main else "")
+                            f"更新{ts_code}数据{len(params)}���" + 
+                            ("（主力合）" if is_main else "")
                         )
                         updated_count += 1
                     else:
@@ -1493,67 +1493,123 @@ def get_initial_equity_data():
 
         print("半小时净盈亏数据处理完成")
         
-        # 4. 获取最近5个交易日14:30的数据和一年前的基准数据
+        # 4. 获取历史数据和计算增长率
         history_sql = """
-        WITH base_time AS (
-            SELECT MAX(PriceTime) as base_time
+        WITH latest_data AS (
+            -- 获取最���的数据
+            SELECT 
+                ProductCode,
+                Equity,
+                PriceTime
+            FROM tbpricedata
+            WHERE PriceTime = (
+                SELECT MAX(PriceTime)
+                FROM tbpricedata
+                WHERE TIME(PriceTime) = '14:30:00'
+            )
+        ),
+        day_7_data AS (
+            -- 获取7日前左右的数据（前后1天范围内）
+            SELECT 
+                ProductCode,
+                Equity,
+                PriceTime,
+                ROW_NUMBER() OVER (PARTITION BY ProductCode ORDER BY ABS(DATEDIFF(PriceTime, DATE_SUB(CURDATE(), INTERVAL 7 DAY)))) as rn
             FROM tbpricedata
             WHERE TIME(PriceTime) = '14:30:00'
-            AND DATE(PriceTime) = DATE_SUB(CURDATE(), INTERVAL 365 DAY)
+            AND PriceTime BETWEEN DATE_SUB(CURDATE(), INTERVAL 8 DAY) AND DATE_SUB(CURDATE(), INTERVAL 6 DAY)
+        ),
+        day_30_data AS (
+            -- 获取30日前左右的数据（前后2天范围内）
+            SELECT 
+                ProductCode,
+                Equity,
+                PriceTime,
+                ROW_NUMBER() OVER (PARTITION BY ProductCode ORDER BY ABS(DATEDIFF(PriceTime, DATE_SUB(CURDATE(), INTERVAL 30 DAY)))) as rn
+            FROM tbpricedata
+            WHERE TIME(PriceTime) = '14:30:00'
+            AND PriceTime BETWEEN DATE_SUB(CURDATE(), INTERVAL 32 DAY) AND DATE_SUB(CURDATE(), INTERVAL 28 DAY)
+        ),
+        day_90_data AS (
+            -- 获取90日前左右的数据（前后3天范围内）
+            SELECT 
+                ProductCode,
+                Equity,
+                PriceTime,
+                ROW_NUMBER() OVER (PARTITION BY ProductCode ORDER BY ABS(DATEDIFF(PriceTime, DATE_SUB(CURDATE(), INTERVAL 90 DAY)))) as rn
+            FROM tbpricedata
+            WHERE TIME(PriceTime) = '14:30:00'
+            AND PriceTime BETWEEN DATE_SUB(CURDATE(), INTERVAL 93 DAY) AND DATE_SUB(CURDATE(), INTERVAL 87 DAY)
+        ),
+        day_180_data AS (
+            -- 获取180日前左右的数据（前后4天范围内）
+            SELECT 
+                ProductCode,
+                Equity,
+                PriceTime,
+                ROW_NUMBER() OVER (PARTITION BY ProductCode ORDER BY ABS(DATEDIFF(PriceTime, DATE_SUB(CURDATE(), INTERVAL 180 DAY)))) as rn
+            FROM tbpricedata
+            WHERE TIME(PriceTime) = '14:30:00'
+            AND PriceTime BETWEEN DATE_SUB(CURDATE(), INTERVAL 184 DAY) AND DATE_SUB(CURDATE(), INTERVAL 176 DAY)
+        ),
+        day_365_data AS (
+            -- 获取365日前左右的数据（前后5天范围内）
+            SELECT 
+                ProductCode,
+                Equity,
+                PriceTime,
+                ROW_NUMBER() OVER (PARTITION BY ProductCode ORDER BY ABS(DATEDIFF(PriceTime, DATE_SUB(CURDATE(), INTERVAL 365 DAY)))) as rn
+            FROM tbpricedata
+            WHERE TIME(PriceTime) = '14:30:00'
+            AND PriceTime BETWEEN DATE_SUB(CURDATE(), INTERVAL 370 DAY) AND DATE_SUB(CURDATE(), INTERVAL 360 DAY)
         )
         SELECT 
-            t1.PriceTime,
-            t1.ProductCode,
-            t1.Equity as current_equity,
-            t2.Equity as base_equity
-        FROM tbpricedata t1
-        LEFT JOIN (
-            SELECT ProductCode, Equity
-            FROM tbpricedata
-            WHERE PriceTime = (SELECT base_time FROM base_time)
-        ) t2 ON t1.ProductCode = t2.ProductCode
-        WHERE TIME(t1.PriceTime) = '14:30:00'
-        AND t1.PriceTime >= DATE_SUB(NOW(), INTERVAL 5 DAY)
-        AND t1.Equity IS NOT NULL
-        ORDER BY t1.PriceTime DESC, t1.ProductCode
+            l.ProductCode,
+            l.Equity as current_equity,
+            d7.Equity as day_7_equity,
+            d7.PriceTime as day_7_time,
+            d30.Equity as day_30_equity,
+            d30.PriceTime as day_30_time,
+            d90.Equity as day_90_equity,
+            d90.PriceTime as day_90_time,
+            d180.Equity as day_180_equity,
+            d180.PriceTime as day_180_time,
+            d365.Equity as day_365_equity,
+            d365.PriceTime as day_365_time
+        FROM latest_data l
+        LEFT JOIN (SELECT * FROM day_7_data WHERE rn = 1) d7 ON l.ProductCode = d7.ProductCode
+        LEFT JOIN (SELECT * FROM day_30_data WHERE rn = 1) d30 ON l.ProductCode = d30.ProductCode
+        LEFT JOIN (SELECT * FROM day_90_data WHERE rn = 1) d90 ON l.ProductCode = d90.ProductCode
+        LEFT JOIN (SELECT * FROM day_180_data WHERE rn = 1) d180 ON l.ProductCode = d180.ProductCode
+        LEFT JOIN (SELECT * FROM day_365_data WHERE rn = 1) d365 ON l.ProductCode = d365.ProductCode
+        WHERE l.Equity IS NOT NULL
         """
-        
-        print("获取历史数据...")
+
+        print("执行历史数据查询...")
         history_results = futures_handler.db.execute_query(history_sql)
         print(f"获取到 {len(history_results)} 条历史数据")
-        
+
         # 5. 计算相对权益数据
         history_data = {
-            'dates': [],
             'equities': {}
         }
-        
-        # 按时间组织历史数据
-        history_times = {}
+
         for row in history_results:
-            time = row[0]
-            code = row[1]
-            current_equity = float(row[2] or 0)
-            base_equity = float(row[3] or 0)
+            code = row[0]
+            current_equity = float(row[1] or 0)
+            day_7_equity = float(row[2] or current_equity)
+            day_30_equity = float(row[4] or current_equity)
+            day_90_equity = float(row[6] or current_equity)
+            day_180_equity = float(row[8] or current_equity)
+            day_365_equity = float(row[10] or current_equity)
             
-            time_str = time.strftime('%m/%d %H:%M')
-            if time_str not in history_times:
-                history_times[time_str] = {}
-                history_data['dates'].append(time_str)
-            
-            # 计算相对权益
-            normalized_equity = current_equity - base_equity + 1000000
-            history_times[time_str][code] = normalized_equity
-        
-        # 只保留最近5个交易日的数据
-        history_data['dates'] = history_data['dates'][:5]
-        
-        # 整理每个品种的数据
-        for code in all_products:
-            history_data['equities'][code] = {}
-            for time_str in history_data['dates']:
-                if time_str in history_times and code in history_times[time_str]:
-                    history_data['equities'][code][time_str] = history_times[time_str][code]
+            history_data['equities'][code] = {
+                'day_7': current_equity - day_7_equity,
+                'day_30': current_equity - day_30_equity,
+                'day_90': current_equity - day_90_equity,
+                'day_180': current_equity - day_180_equity,
+                'day_365': current_equity - day_365_equity
+            }
         
         print("数据处理完成")
         
