@@ -206,7 +206,7 @@ function updateFetchStatus(status, elements) {
         elements.processedCount.textContent = status.updated_count || 0;
     }
     
-    // 更新日志信息
+    // 更新日志信
     if (elements.fetchLog && status.logs) {
         // 保留最新的50条日志
         const logs = status.logs.slice(-50);
@@ -546,7 +546,7 @@ function formatNumber(num) {
 
 // 初始化机会筛选模块
 function initializeFilterModule() {
-    // 加载所有交易所的合约
+    // 载所有交易所的合
     document.querySelectorAll('.available-contracts').forEach(container => {
         const exchange = container.dataset.exchange;
         loadAvailableContracts(exchange);
@@ -661,6 +661,7 @@ function filterEquityData() {
         if (selectedContracts.includes(code.toUpperCase())) {
             filteredData.latest_equity.equities[code] = {
                 position: data.position,
+                name: data.name,  // 保留中文名称
                 profits: data.profits
             };
         }
@@ -669,7 +670,14 @@ function filterEquityData() {
     // 筛选相对权益数据
     for (const [code, data] of Object.entries(currentEquityData.previous_equity.equities)) {
         if (selectedContracts.includes(code.toUpperCase())) {
-            filteredData.previous_equity.equities[code] = data;
+            filteredData.previous_equity.equities[code] = {
+                name: data.name,  // 保留中文名称
+                day_7: data.day_7,
+                day_30: data.day_30,
+                day_90: data.day_90,
+                day_180: data.day_180,
+                day_365: data.day_365
+            };
         }
     }
 
@@ -703,7 +711,7 @@ function moveSelectedContracts(action) {
     
     selectedItems.forEach(item => {
         // 检查目标容器中是否已存在该品种
-        const existingItem = targetContainer.querySelector(`[data-contract-name="${item.dataset.contractName}"]`);
+        const existingItem = targetContainer.querySelector(`[data-contract-code="${item.dataset.contractCode}"]`);
         if (!existingItem) {
             // 移除选中状态
             item.classList.remove('active');
@@ -745,7 +753,7 @@ function clearSelectedContracts() {
 function updateLatestEquityTable(data) {
     if (!data || !data.times || !data.equities) return;
     
-    // 新表头时间
+    // 更新表头时间
     data.times.forEach((time, index) => {
         const th = document.getElementById(`time-${index}`);
         if (th) {
@@ -759,6 +767,7 @@ function updateLatestEquityTable(data) {
     const sortedData = Object.entries(data.equities)
         .map(([code, info]) => ({
             code,
+            name: info.name,        // 从数据中获取中文名称
             position: info.position || 0,
             profits: data.times.map(time => {
                 const value = info.profits ? info.profits[time] : 0;
@@ -766,6 +775,8 @@ function updateLatestEquityTable(data) {
             })
         }))
         .sort((a, b) => (b.profits[0] || 0) - (a.profits[0] || 0));
+    
+    console.log('Sorted data for latest equity:', sortedData);  // 添加调试日志
     
     const tbody = document.getElementById('latestEquityTable');
     tbody.innerHTML = sortedData.map((item, index) => {
@@ -779,6 +790,7 @@ function updateLatestEquityTable(data) {
         return `
             <tr class="${bgClass}">
                 <td class="text-center">${item.code}</td>
+                <td class="text-center">${item.name || '-'}</td>
                 <td class="text-center ${positionClass}">${positionText}</td>
                 ${item.profits.map(profit => {
                     const profitClass = profit > 0 ? 'text-success' : profit < 0 ? 'text-danger' : '';
@@ -795,13 +807,14 @@ function updatePreviousEquityTable(data) {
     
     // 转换为数组并按7日增长排序
     const sortedData = Object.entries(data.equities)
-        .map(([code, growth]) => ({
+        .map(([code, info]) => ({
             code,
-            day_7: growth.day_7,
-            day_30: growth.day_30,
-            day_90: growth.day_90,
-            day_180: growth.day_180,
-            day_365: growth.day_365
+            name: info.name,  // 从数据中获取中文名称
+            day_7: info.day_7,
+            day_30: info.day_30,
+            day_90: info.day_90,
+            day_180: info.day_180,
+            day_365: info.day_365
         }))
         .sort((a, b) => (b.day_7 || 0) - (a.day_7 || 0));
     
@@ -812,6 +825,7 @@ function updatePreviousEquityTable(data) {
         return `
             <tr class="${bgClass}">
                 <td class="text-center">${item.code}</td>
+                <td class="text-center">${item.name}</td>
                 <td class="text-center ${getGrowthClass(item.day_7)}">${formatNumber(item.day_7)}</td>
                 <td class="text-center ${getGrowthClass(item.day_30)}">${formatNumber(item.day_30)}</td>
                 <td class="text-center ${getGrowthClass(item.day_90)}">${formatNumber(item.day_90)}</td>
@@ -837,6 +851,7 @@ function updatePreviousEquityTable(data) {
                 return `
                     <tr class="${bgClass}">
                         <td class="text-center">${item.code}</td>
+                        <td class="text-center">${item.name}</td>
                         <td class="text-center ${getGrowthClass(item.day_7)}">${formatNumber(item.day_7)}</td>
                         <td class="text-center ${getGrowthClass(item.day_30)}">${formatNumber(item.day_30)}</td>
                         <td class="text-center ${getGrowthClass(item.day_90)}">${formatNumber(item.day_90)}</td>
@@ -1231,7 +1246,7 @@ async function loadAvailableContracts(exchange) {
             const container = document.querySelector(`.available-contracts[data-exchange="${exchange}"]`);
             const selectedContainer = document.querySelector('.selected-contracts');
             
-            // 获取已合约的代码列表
+            // 获取已选合约的代码列表
             const selectedCodes = Array.from(selectedContainer.querySelectorAll('.list-group-item'))
                 .map(item => item.dataset.contractCode);
             
@@ -1242,10 +1257,13 @@ async function loadAvailableContracts(exchange) {
             
             // 更新备选列表
             container.innerHTML = availableContracts.map(contract => `
-                <div class="list-group-item" 
+                <div class="list-group-item d-flex justify-content-between align-items-center" 
                      data-contract-code="${contract.code}"
                      data-contract-name="${contract.name}">
-                    ${contract.name}
+                    <div class="d-flex w-100">
+                        <span class="me-3" style="width: 80px;">${contract.code}</span>
+                        <span class="text-muted">${contract.name}</span>
+                    </div>
                 </div>
             `).join('');
             

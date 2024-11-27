@@ -6,6 +6,7 @@ import datetime
 sys.path.append('.')  # 添加当前目录到路径
 from comm.commFunctions import futures_handler
 import pandas as pd
+from utils.product_mapping import get_product_name
 
 app = Flask(__name__)
 
@@ -38,11 +39,11 @@ def get_filter_contracts(exchange):
         
         results = futures_handler.db.execute_query(sql, (exchange, today))
         
-        # 转数式
+        # 转换数据，添加中文名称
         contracts = [{
             'code': row[0],
-            'name': row[0]  # 直接使用 fut_code 作为显示名称
-        } for row in results if row[0]]  # 确保 fut_code 不为空
+            'name': get_product_name(row[0])  # 使用映射获取中文名称
+        } for row in results if row[0]]
         
         return jsonify({
             'status': 'success',
@@ -438,7 +439,7 @@ def get_main_contracts():
         week_ago = (datetime.datetime.now() - datetime.timedelta(days=7)).strftime('%Y%m%d')
         month_ago = (datetime.datetime.now() - datetime.timedelta(days=30)).strftime('%Y%m%d')
         
-        # 获取最新交易日期
+        # 获取最新交易期
         date_sql = "SELECT MAX(trade_date) FROM futures_daily_quotes"
         latest_date = futures_handler.db.execute_query(date_sql)[0][0]
         print(f"Latest trade date: {latest_date}")
@@ -847,7 +848,7 @@ def update_quotes():
                 end_date = latest_available_date
                 print(f"取{ts_code}的数据: {start_date} 到 {end_date}" + ("（主力合约）" if is_main else ""))
                 
-                # 有在需要更新据时才调用API
+                # 有在需要新据时才调用API
                 if start_date <= end_date:
                     df = futures_handler._call_tushare_api(
                         futures_handler.pro.fut_daily,
@@ -892,7 +893,7 @@ def update_quotes():
                         
                         futures_handler.db.execute_many(insert_sql, params)
                         futures_handler.update_status['logs'].append(
-                            f"更新{ts_code}数据{len(params)}���" + 
+                            f"更新{ts_code}数据" +
                             ("（主力合）" if is_main else "")
                         )
                         updated_count += 1
@@ -1496,7 +1497,7 @@ def get_initial_equity_data():
         # 4. 获取历史数据和计算增长率
         history_sql = """
         WITH latest_data AS (
-            -- 获取最���的数据
+            -- 获取最的数据
             SELECT 
                 ProductCode,
                 Equity,
@@ -1642,15 +1643,28 @@ def get_initial_equity_data():
             positions[code] = position or 0  # 如果position为None，使用0
             print(f"品种: {code}, 方向: {position}, 时间: {price_time}")
 
-        # 在计算半小时净盈亏数据时添加position信息
+        # 在计算半小时净盈亏数据时添加position和name信息
         for code in latest_data['equities']:
             profits = latest_data['equities'][code]
             latest_data['equities'][code] = {
                 'position': positions.get(code, 0),  # 如果没有方向数据，默认为0（空仓）
+                'name': get_product_name(code),  # 添加中文名称
                 'profits': {
                     time_str: (0 if profit == 0 else profit)  # 确保0值保持为0，不会被转换为None
                     for time_str, profit in profits.items()
                 }
+            }
+        
+        # 在历史权益数据中也添加name信息
+        for code in history_data['equities']:
+            values = history_data['equities'][code]  # 保存原始值
+            history_data['equities'][code] = {
+                'name': get_product_name(code),  # 添加中文名称
+                'day_7': values.get('day_7', 0),
+                'day_30': values.get('day_30', 0),
+                'day_90': values.get('day_90', 0),
+                'day_180': values.get('day_180', 0),
+                'day_365': values.get('day_365', 0)
             }
         
         print("数据处理完成")
